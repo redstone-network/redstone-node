@@ -26,6 +26,6 @@ sc-network = { version = "0.10.0-dev", path = "../network" }
 sp-runtime = { version = "6.0.0", path = "../../primitives/runtime" }
 
 [dev-dependencies]
-async-std = "1.11.0"
+async-std = "1.12.0"
 quickcheck = { version = "1.0.3", default-features = false }
 substrate-test-runtime-client = { version = "2.0.0", path = "../../test-utils/runtime/client" }
