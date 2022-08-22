@@ -20,7 +20,7 @@ libp2p = { version = "0.45.1", default-features = false }
 log = "0.4.17"
 parking_lot = "0.12.0"
 serde = { version = "1.0", features = ["derive"] }
-thiserror = "1.0.30"
+thiserror = "1.0.32"
 prometheus-endpoint = { package = "substrate-prometheus-endpoint", version = "0.10.0-dev", path = "../../../utils/prometheus" }
 sc-client-api = { version = "4.0.0-dev", path = "../../api" }
 sc-utils = { version = "4.0.0-dev", path = "../../utils" }

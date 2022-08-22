@@ -33,7 +33,7 @@ serde = "1.0.136"
 serde_json = "1.0.79"
 serde_nanos = "0.1.2"
 tempfile = "3.2.0"
-thiserror = "1.0.30"
+thiserror = "1.0.32"
 thousands = "0.2.0"
 frame-benchmarking = { version = "4.0.0-dev", path = "../../../frame/benchmarking" }
 frame-support = { version = "4.0.0-dev", path = "../../../frame/support" }

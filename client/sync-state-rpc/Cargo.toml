@@ -17,7 +17,7 @@ codec = { package = "parity-scale-codec", version = "3.0.0" }
 jsonrpsee = { version = "0.13.0", features = ["server", "macros"] }
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
-thiserror = "1.0.30"
+thiserror = "1.0.32"
 sc-chain-spec = { version = "4.0.0-dev", path = "../chain-spec" }
 sc-client-api = { version = "4.0.0-dev", path = "../api" }
 sc-consensus-babe = { version = "0.10.0-dev", path = "../consensus/babe" }
