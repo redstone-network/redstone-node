@@ -1,0 +1,7 @@
+[submodule "bin/node-template/ecosystem-modules/stable-asset"]
+	path = bin/node-template/ecosystem-modules/stable-asset
+	url = https://github.com/nutsfinance/stable-asset.git
+[submodule "bin/node-template/open-runtime-module-library"]
+	path = bin/node-template/open-runtime-module-library
+	url = https://github.com/redstone-network/open-runtime-module-library.git
+	branch = polkadot-v0.9.24-asset-safe
