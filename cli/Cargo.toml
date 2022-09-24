@@ -87,10 +87,10 @@ pallet-asset-tx-payment = { version = "4.0.0-dev", git = "https://github.com/par
 pallet-im-online = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 
 # node-specific dependencies
-node-runtime = { version = "3.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-rpc = { version = "3.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-primitives = { version = "2.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-executor = { version = "3.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+node-runtime = { version = "3.0.0-dev", path = "../runtime" }
+node-rpc = { version = "3.0.0-dev", path = "../rpc" }
+node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
+node-executor = { version = "3.0.0-dev", path = "../executor" }
 
 # CLI-specific dependencies
 sc-cli = { version = "0.10.0-dev", optional = true, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
@@ -100,7 +100,7 @@ try-runtime-cli = { version = "0.10.0-dev", optional = true, git = "https://gith
 serde_json = "1.0.79"
 
 [target.'cfg(any(target_arch="x86_64", target_arch="aarch64"))'.dependencies]
-node-executor = { version = "3.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24", features = ["wasmtime"] }
+node-executor = { version = "3.0.0-dev", path = "../executor" }
 sc-cli = { version = "0.10.0-dev", optional = true, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24", features = ["wasmtime"] }
 sc-service = { version = "0.10.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24", features = [
 	"wasmtime",

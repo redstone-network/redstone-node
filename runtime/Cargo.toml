@@ -28,7 +28,7 @@ sp-authority-discovery = { version = "4.0.0-dev", default-features = false, git 
 sp-consensus-babe = { version = "0.10.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-block-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24", default-features = false, version = "4.0.0-dev" }
 sp-inherents = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-primitives = { version = "2.0.0", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
 sp-offchain = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-core = { version = "6.0.0", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-std = { version = "4.0.0", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }

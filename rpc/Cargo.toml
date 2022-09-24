@@ -12,7 +12,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 jsonrpsee = { version = "0.13.0", features = ["server"] }
-node-primitives = { version = "2.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
 pallet-contracts-rpc = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-mmr-rpc = { version = "3.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-transaction-payment-rpc = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }

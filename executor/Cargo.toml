@@ -15,8 +15,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { package = "parity-scale-codec", version = "3.0.0" }
 scale-info = { version = "2.1.1", features = ["derive"] }
 frame-benchmarking = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-primitives = { version = "2.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-runtime = { version = "3.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
+node-runtime = { version = "3.0.0-dev", path = "../runtime" }
 sc-executor = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-core = { version = "6.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-keystore = { version = "0.12.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
@@ -30,7 +30,7 @@ futures = "0.3.21"
 wat = "1.0"
 frame-support = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 frame-system = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-testing = { version = "3.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+node-testing = { version = "3.0.0-dev", path = "../testing" }
 pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-contracts = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-im-online = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
