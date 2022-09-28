@@ -363,7 +363,16 @@ pub fn new_full_base(
 			warp_sync: Some(warp_sync),
 		})?;
 
+	let keystore = keystore_container.sync_keystore();
 	if config.offchain_worker.enabled {
+		//todo (for debug)
+		sp_keystore::SyncCryptoStore::sr25519_generate_new(
+			&*keystore,
+			node_runtime::pallet_difttt::KEY_TYPE,
+			Some("//Alice"),
+		)
+		.expect("Creating key with account Alice should succeed.");
+
 		sc_service::build_offchain_workers(
 			&config,
 			task_manager.spawn_handle(),

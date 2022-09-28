@@ -21,10 +21,10 @@
 use grandpa_primitives::AuthorityId as GrandpaId;
 use hex_literal::hex;
 use node_runtime::{
-	constants::currency::*, wasm_binary_unwrap, AuthorityDiscoveryConfig, BabeConfig,
-	BalancesConfig, Block, CouncilConfig, DemocracyConfig, ElectionsConfig, GrandpaConfig,
-	ImOnlineConfig, IndicesConfig, MaxNominations, SessionConfig, SessionKeys, SocietyConfig,
-	StakerStatus, StakingConfig, SudoConfig, SystemConfig, TechnicalCommitteeConfig,
+	wasm_binary_unwrap, AuthorityDiscoveryConfig, BabeConfig, BalancesConfig, Block, CouncilConfig,
+	DemocracyConfig, DexConfig, ElectionsConfig, GrandpaConfig, ImOnlineConfig, IndicesConfig,
+	MaxNominations, SessionConfig, SessionKeys, SocietyConfig, StakerStatus, StakingConfig,
+	SudoConfig, SystemConfig, TechnicalCommitteeConfig, TokensConfig,
 };
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_chain_spec::ChainSpecExtension;
@@ -39,12 +39,23 @@ use sp_runtime::{
 	Perbill,
 };
 
-pub use node_primitives::{AccountId, Balance, Signature};
+pub use node_primitives::{
+	currency::{
+		TokenInfo, ACA, AUSD, BNC, DOT, KAR, KBTC, KINT, KSM, KUSD, LCDOT, LDOT, LKSM, PHA, RENBTC,
+		VSKSM,
+	},
+	AccountId, Balance, Signature, TokenSymbol, TradingPair,
+};
 pub use node_runtime::GenesisConfig;
 
 type AccountPublic = <Signature as Verify>::Signer;
 
 const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
+const MILLICENTS: u128 = 1_000_000_000;
+const CENTS: u128 = 1_000 * MILLICENTS; // assume this is worth about a cent.
+const DOLLARS: u128 = 100 * CENTS;
+
+const INITIAL_BALANCE: u128 = 10_000_000 * DOLLARS;
 
 /// Node `ChainSpec` extensions.
 ///
@@ -339,7 +350,7 @@ pub fn testnet_genesis(
 				.collect(),
 			phantom: Default::default(),
 		},
-		sudo: SudoConfig { key: Some(root_key) },
+		sudo: SudoConfig { key: Some(root_key.clone()) },
 		babe: BabeConfig {
 			authorities: vec![],
 			epoch_config: Some(node_runtime::BABE_GENESIS_EPOCH_CONFIG),
@@ -364,6 +375,38 @@ pub fn testnet_genesis(
 		transaction_storage: Default::default(),
 		transaction_payment: Default::default(),
 		nomination_pools: Default::default(),
+		tokens: TokensConfig {
+			balances: endowed_accounts
+				.iter()
+				.flat_map(|x| {
+					vec![
+						(x.clone(), AUSD, INITIAL_BALANCE),
+						(x.clone(), RENBTC, INITIAL_BALANCE),
+						(x.clone(), DOT, INITIAL_BALANCE),
+					]
+				})
+				.collect(),
+		},
+		dex: DexConfig {
+			initial_listing_trading_pairs: vec![],
+			initial_enabled_trading_pairs: vec![
+				TradingPair::from_currency_ids(AUSD, RENBTC).unwrap(),
+				TradingPair::from_currency_ids(AUSD, DOT).unwrap(),
+			],
+			initial_added_liquidity_pools: vec![(
+				root_key.clone(),
+				vec![
+					(
+						TradingPair::from_currency_ids(AUSD, RENBTC).unwrap(),
+						(1_000_000 * DOLLARS, 2_000_000 * DOLLARS),
+					),
+					(
+						TradingPair::from_currency_ids(AUSD, DOT).unwrap(),
+						(1_000_000 * DOLLARS, 2_000_000 * DOLLARS),
+					),
+				],
+			)],
+		},
 	}
 }
 

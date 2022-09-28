@@ -89,7 +89,7 @@ pallet-im-online = { version = "4.0.0-dev", default-features = false, git = "htt
 # node-specific dependencies
 node-runtime = { version = "3.0.0-dev", path = "../runtime" }
 node-rpc = { version = "3.0.0-dev", path = "../rpc" }
-node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
+node-primitives = { package = "acala-primitives", path = "../primitives", default-features = false }
 node-executor = { version = "3.0.0-dev", path = "../executor" }
 
 # CLI-specific dependencies

@@ -15,7 +15,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { package = "parity-scale-codec", version = "3.0.0" }
 scale-info = { version = "2.1.1", features = ["derive"] }
 frame-benchmarking = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
+node-primitives = { package = "acala-primitives", path = "../primitives", default-features = false }
 node-runtime = { version = "3.0.0-dev", path = "../runtime" }
 sc-executor = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-core = { version = "6.0.0", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }

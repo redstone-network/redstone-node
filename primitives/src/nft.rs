@@ -22,7 +22,7 @@ use scale_info::{build::Fields, meta_type, Path, Type, TypeInfo, TypeParameter};
 use serde::{Deserialize, Serialize};
 
 use frame_support::RuntimeDebug;
-use sp_std::{collections::btree_map::BTreeMap, prelude::*};
+use sp_std::{collections::btree_map::BTreeMap, prelude::*, vec};
 
 use enumflags2::BitFlags;
 

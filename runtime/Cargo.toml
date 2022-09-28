@@ -28,7 +28,7 @@ sp-authority-discovery = { version = "4.0.0-dev", default-features = false, git 
 sp-consensus-babe = { version = "0.10.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-block-builder = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24", default-features = false, version = "4.0.0-dev" }
 sp-inherents = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
-node-primitives = { package = "node-primitives", path = "../primitives", default-features = false }
+node-primitives = { package = "acala-primitives", path = "../primitives", default-features = false }
 sp-offchain = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-core = { version = "6.0.0", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-std = { version = "4.0.0", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
@@ -105,6 +105,16 @@ pallet-transaction-storage = { version = "4.0.0-dev", default-features = false, 
 pallet-uniques = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-vesting = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-whitelist = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+
+
+orml-currencies = { default-features = false, path = "../open-runtime-module-library/currencies" }
+orml-tokens = { default-features = false, path = "../open-runtime-module-library/tokens" }
+orml-traits = { default-features = false, path = "../open-runtime-module-library/traits" }
+
+# Local Dependencies
+pallet-difttt = { version = "4.0.0-dev", default-features = false, path = "../pallets/difttt" }
+pallet-dex = {version = "2.8.2", default-features = false, path = "../pallets/dex"}
+support = { package = "module-support", path = "../pallets/support", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { version = "5.0.0-dev", git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }

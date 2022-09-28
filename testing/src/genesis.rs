@@ -19,13 +19,26 @@
 //! Genesis Configuration.
 
 use crate::keyring::*;
+pub use node_primitives::{
+	currency::{
+		TokenInfo, ACA, AUSD, BNC, DOT, KAR, KBTC, KINT, KSM, KUSD, LCDOT, LDOT, LKSM, PHA, RENBTC,
+		VSKSM,
+	},
+	TokenSymbol, TradingPair,
+};
 use node_runtime::{
-	constants::currency::*, wasm_binary_unwrap, AccountId, BabeConfig, BalancesConfig,
-	GenesisConfig, GrandpaConfig, IndicesConfig, SessionConfig, SocietyConfig, StakerStatus,
-	StakingConfig, SystemConfig, BABE_GENESIS_EPOCH_CONFIG,
+	wasm_binary_unwrap, AccountId, BabeConfig, BalancesConfig, DexConfig, GenesisConfig,
+	GrandpaConfig, IndicesConfig, SessionConfig, SocietyConfig, StakerStatus, StakingConfig,
+	SystemConfig, TokensConfig, BABE_GENESIS_EPOCH_CONFIG,
 };
 use sp_keyring::{Ed25519Keyring, Sr25519Keyring};
 use sp_runtime::Perbill;
+
+const MILLICENTS: u128 = 1_000_000_000;
+const CENTS: u128 = 1_000 * MILLICENTS; // assume this is worth about a cent.
+const DOLLARS: u128 = 100 * CENTS;
+
+const INITIAL_BALANCE: u128 = 10_000_000 * DOLLARS;
 
 /// Create genesis runtime configuration for tests.
 pub fn config(code: Option<&[u8]>) -> GenesisConfig {
@@ -44,7 +57,7 @@ pub fn config_endowed(code: Option<&[u8]>, extra_endowed: Vec<AccountId>) -> Gen
 		(ferdie(), 100 * DOLLARS),
 	];
 
-	endowed.extend(extra_endowed.into_iter().map(|endowed| (endowed, 100 * DOLLARS)));
+	endowed.extend(extra_endowed.clone().into_iter().map(|endowed| (endowed, 100 * DOLLARS)));
 
 	GenesisConfig {
 		system: SystemConfig {
@@ -93,5 +106,37 @@ pub fn config_endowed(code: Option<&[u8]>, extra_endowed: Vec<AccountId>) -> Gen
 		transaction_storage: Default::default(),
 		transaction_payment: Default::default(),
 		nomination_pools: Default::default(),
+		tokens: TokensConfig {
+			balances: extra_endowed
+				.iter()
+				.flat_map(|x| {
+					vec![
+						(x.clone(), AUSD, INITIAL_BALANCE),
+						(x.clone(), RENBTC, INITIAL_BALANCE),
+						(x.clone(), DOT, INITIAL_BALANCE),
+					]
+				})
+				.collect(),
+		},
+		dex: DexConfig {
+			initial_listing_trading_pairs: vec![],
+			initial_enabled_trading_pairs: vec![
+				TradingPair::from_currency_ids(AUSD, RENBTC).unwrap(),
+				TradingPair::from_currency_ids(AUSD, DOT).unwrap(),
+			],
+			initial_added_liquidity_pools: vec![(
+				alice(),
+				vec![
+					(
+						TradingPair::from_currency_ids(AUSD, RENBTC).unwrap(),
+						(1_000_000 * DOLLARS, 2_000_000 * DOLLARS),
+					),
+					(
+						TradingPair::from_currency_ids(AUSD, DOT).unwrap(),
+						(1_000_000 * DOLLARS, 2_000_000 * DOLLARS),
+					),
+				],
+			)],
+		},
 	}
 }

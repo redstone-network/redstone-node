@@ -20,7 +20,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_election_provider_support::{
@@ -28,7 +28,7 @@ use frame_election_provider_support::{
 };
 use frame_support::{
 	construct_runtime,
-	pallet_prelude::Get,
+	pallet_prelude::{DispatchResult, Get},
 	parameter_types,
 	traits::{
 		AsEnsureOriginWithArg, ConstU128, ConstU16, ConstU32, Currency, EnsureOneOf,
@@ -77,6 +77,11 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 use static_assertions::const_assert;
 
+use node_primitives::{evm::EvmAddress, CurrencyId, TokenSymbol};
+use orml_currencies::BasicCurrencyAdapter;
+use orml_traits::MultiReservableCurrency;
+use support::{DEXIncentives, Erc20InfoMapping};
+
 #[cfg(any(feature = "std", test))]
 pub use frame_system::Call as SystemCall;
 #[cfg(any(feature = "std", test))]
@@ -95,6 +100,7 @@ use impls::{Author, CreditToBlockAuthor};
 /// Constant values used within the runtime.
 pub mod constants;
 use constants::{currency::*, time::*};
+pub use pallet_difttt;
 use sp_runtime::generic::Era;
 
 /// Generated voter bag information.
@@ -1127,6 +1133,122 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
+orml_traits::parameter_type_with_key! {
+	pub ExistentialDeposits: |_currency_id: CurrencyId| -> Balance {
+		0
+	};
+}
+impl orml_tokens::Config for Runtime {
+	type Amount = Amount;
+	type Balance = Balance;
+	type CurrencyId = CurrencyId;
+	type DustRemovalWhitelist = Nothing;
+	type Event = Event;
+	type ExistentialDeposits = ExistentialDeposits;
+	type MaxLocks = ();
+	type MaxReserves = ();
+	type OnDust = ();
+	type ReserveIdentifier = [u8; 8];
+	type WeightInfo = ();
+	type TransferProtectInterface = DiftttModule;
+	type OnNewTokenAccount = ();
+	type OnKilledTokenAccount = ();
+}
+
+pub type Amount = i128;
+parameter_types! {
+	pub const GetNativeCurrencyId: CurrencyId = CurrencyId::Token(TokenSymbol::ACA);
+}
+
+impl orml_currencies::Config for Runtime {
+	type GetNativeCurrencyId = GetNativeCurrencyId;
+	type MultiCurrency = Tokens;
+	type NativeCurrency = BasicCurrencyAdapter<Runtime, Balances, Amount, BlockNumber>;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub const UnsignedPriority: BlockNumber = 1;
+}
+
+/// Configure the pallet-difttt in pallets/difttt.
+impl pallet_difttt::Config for Runtime {
+	type Event = Event;
+	type TimeProvider = pallet_timestamp::Pallet<Runtime>;
+	type Call = Call;
+	type UnsignedPriority = UnsignedPriority;
+	type WeightInfo = pallet_difttt::weights::SubstrateWeight<Runtime>;
+
+	type Currency = Currencies;
+	type AuthorityId = pallet_difttt::crypto::TestAuthId;
+}
+
+parameter_types! {
+	pub const GetExchangeFee: (u32, u32) = (3, 1000);	// 0.3%
+	pub const ExtendedProvisioningBlocks: BlockNumber = 2 * DAYS;
+	pub const TradingPathLimit: u32 = 4;
+	pub const DEXPalletId: PalletId = PalletId(*b"aca/dexm");
+}
+
+pub struct MockErc20InfoMapping;
+
+impl Erc20InfoMapping for MockErc20InfoMapping {
+	fn name(_currency_id: CurrencyId) -> Option<Vec<u8>> {
+		None
+	}
+
+	fn symbol(_currency_id: CurrencyId) -> Option<Vec<u8>> {
+		None
+	}
+
+	fn decimals(_currency_id: CurrencyId) -> Option<u8> {
+		None
+	}
+
+	fn encode_evm_address(_v: CurrencyId) -> Option<EvmAddress> {
+		None
+	}
+
+	fn decode_evm_address(_v: EvmAddress) -> Option<CurrencyId> {
+		None
+	}
+}
+
+pub struct MockDEXIncentives;
+impl DEXIncentives<AccountId, CurrencyId, Balance> for MockDEXIncentives {
+	fn do_deposit_dex_share(
+		who: &AccountId,
+		lp_currency_id: CurrencyId,
+		amount: Balance,
+	) -> DispatchResult {
+		Tokens::reserve(lp_currency_id, who, amount)
+	}
+
+	fn do_withdraw_dex_share(
+		who: &AccountId,
+		lp_currency_id: CurrencyId,
+		amount: Balance,
+	) -> DispatchResult {
+		let _ = Tokens::unreserve(lp_currency_id, who, amount);
+		Ok(())
+	}
+}
+
+/// Configure the pallet-dex in pallets/dex.
+impl pallet_dex::Config for Runtime {
+	type Event = Event;
+	type Currency = Currencies;
+	type GetExchangeFee = GetExchangeFee;
+	type TradingPathLimit = TradingPathLimit;
+	type PalletId = DEXPalletId;
+	type Erc20InfoMapping = MockErc20InfoMapping;
+	type DEXIncentives = MockDEXIncentives;
+	type WeightInfo = ();
+	// type ListingOrigin = EnsureRootOrHalfGeneralCouncil;
+	type ExtendedProvisioningBlocks = ExtendedProvisioningBlocks;
+	type OnLiquidityPoolUpdated = ();
+}
+
 parameter_types! {
 	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
 	/// We prioritize im-online heartbeats over election solution submission.
@@ -1531,6 +1653,10 @@ construct_runtime!(
 		ConvictionVoting: pallet_conviction_voting,
 		Whitelist: pallet_whitelist,
 		NominationPools: pallet_nomination_pools,
+		DiftttModule: pallet_difttt,
+		Tokens: orml_tokens,
+		Currencies: orml_currencies,
+		Dex: pallet_dex,
 	}
 );
 
