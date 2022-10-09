@@ -551,7 +551,7 @@ pub mod pallet {
 					let signature_valid =
 						SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
 					if !signature_valid {
-						return InvalidTransaction::BadProof.into()
+						return InvalidTransaction::BadProof.into();
 					}
 
 					valid_tx(b"submit_recipe_done_with_signed_payload".to_vec())
@@ -563,7 +563,7 @@ pub mod pallet {
 					let signature_valid =
 						SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
 					if !signature_valid {
-						return InvalidTransaction::BadProof.into()
+						return InvalidTransaction::BadProof.into();
 					}
 
 					valid_tx(b"submit_recipe_triger_times_with_signed_payload".to_vec())
@@ -614,8 +614,8 @@ pub mod pallet {
 
 				match triger {
 					Some(Triger::Timer(insert_time, timer_millis_seconds)) => {
-						if insert_time + recipe.times * timer_millis_seconds <
-							timestamp_now.unix_millis()
+						if insert_time + recipe.times * timer_millis_seconds
+							< timestamp_now.unix_millis()
 						{
 							(*recipe).times += 1;
 							log::info!(
@@ -627,13 +627,14 @@ pub mod pallet {
 							map_running_action_recipe_task.insert(*recipe_id, recipe.clone());
 						}
 					},
-					Some(Triger::Schedule(_, timestamp)) =>
+					Some(Triger::Schedule(_, timestamp)) => {
 						if timestamp < timestamp_now.unix_millis() {
 							(*recipe).times += 1;
 							(*recipe).done = true;
 
 							map_running_action_recipe_task.insert(*recipe_id, recipe.clone());
-						},
+						}
+					},
 					_ => {},
 				}
 			}
@@ -655,7 +656,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode url error  {:?}", e);
-								continue
+								continue;
 							},
 						};
 
@@ -664,7 +665,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode token error  {:?}", e);
-									continue
+									continue;
 								},
 							};
 
@@ -674,7 +675,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode revicer error  {:?}", e);
-								continue
+								continue;
 							},
 						};
 
@@ -683,7 +684,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode title error  {:?}", e);
-									continue
+									continue;
 								},
 							};
 
@@ -692,7 +693,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode body error  {:?}", e);
-									continue
+									continue;
 								},
 							};
 
@@ -737,7 +738,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode revicer error  {:?}", e);
-								continue
+								continue;
 							},
 						};
 
@@ -746,7 +747,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode title error  {:?}", e);
-									continue
+									continue;
 								},
 							};
 
@@ -755,7 +756,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode body error  {:?}", e);
-									continue
+									continue;
 								},
 							};
 
@@ -776,7 +777,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode url error  {:?}", e);
-								continue
+								continue;
 							},
 						};
 
@@ -786,7 +787,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode message error  {:?}", e);
-								continue
+								continue;
 							},
 						};
 
@@ -838,10 +839,10 @@ pub mod pallet {
 			let options = BASE64.encode(options.as_bytes());
 
 			//let url = "https://reqbin.com/echo/post/json";
-			let url = "http://127.0.0.1:8000/".to_owned() +
-				&dockr_url.to_owned() +
-				"/" + &options.to_owned() +
-				"/" + &max_run_num.to_string();
+			let url = "http://127.0.0.1:8000/".to_owned()
+				+ &dockr_url.to_owned()
+				+ "/" + &options.to_owned()
+				+ "/" + &max_run_num.to_string();
 
 			let request = http::Request::get(&url).add_header("content-type", "application/json");
 
@@ -857,7 +858,7 @@ pub mod pallet {
 
 			if response.code != 200 {
 				log::info!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown)
+				return Err(http::Error::Unknown);
 			}
 
 			let body = response.body().collect::<Vec<u8>>();
@@ -870,7 +871,7 @@ pub mod pallet {
 
 			if "ok" != body_str {
 				log::info!("publish task fail: {}", body_str);
-				return Err(http::Error::Unknown)
+				return Err(http::Error::Unknown);
 			}
 
 			Ok(0)

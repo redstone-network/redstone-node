@@ -2,6 +2,7 @@ use super::*;
 use crate::mock::*;
 use frame_support::{assert_ok, traits::ConstU32, BoundedVec};
 use frame_system::Call;
+use frame_system::Origin;
 use sp_core::{
 	offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
 	sr25519::Public,
@@ -10,6 +11,10 @@ use sp_keystore::{testing::KeyStore, KeystoreExt};
 use std::sync::Arc;
 
 #[test]
+// fn it_works() {
+// 	let result = 4;
+// 	assert_eq!(result, 4);
+}
 fn create_trigger_should_work() {
 	new_test_ext().execute_with(|| {
 		// pub enum Triger {
@@ -64,7 +69,8 @@ fn create_action_should_work() {
 			Origin::signed(Public::from_raw([0; 32])),
 			mail_with_token
 		)); //枚举实例一，通过
-		assert_ok!(DiftttModule::create_action(Origin::signed(Public::from_raw([0; 32])), oracle)); //枚举实例二，通过
+		assert_ok!(DiftttModule::create_action(Origin::signed(Public::from_raw([0; 32])), oracle));
+		//枚举实例二，通过
 	});
 }
 
@@ -186,6 +192,6 @@ fn del_recipe_should_work() {
 	});
 }
 
-// #[test]
-// fn set_recipe_done_unsigned_should_work() {
-// }
+#[test]
+fn set_recipe_done_unsigned_should_work() {
+}

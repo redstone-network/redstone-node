@@ -7,7 +7,9 @@ use frame_support::{
 	PalletId,
 };
 use frame_system as system;
-use orml_currencies::BasicCurrencyAdapter;
+// use orml_currencies::BasicCurrencyAdapter;
+pub type NativeCurrency =
+	orml_currencies::BasicCurrencyAdapter<Test, Balances, Amount, BlockNumber>;
 use orml_traits::MultiReservableCurrency;
 use primitives::{
 	evm::EvmAddress, AccountIndex, Balance, BlockNumber, CurrencyId, Hash, Index, Moment,
@@ -87,7 +89,8 @@ impl pallet_balances::Config for Test {
 	type DustRemoval = ();
 	type Event = Event;
 	type ExistentialDeposit = ExistentialDeposit;
-	type AccountStore = pallet_balances::AccountData<u128>;
+	// type AccountStore = pallet_balances::AccountData<u128>;
+	type AccountStore = System;
 	type MaxLocks = ();
 	type MaxReserves = MaxReserves;
 	type ReserveIdentifier = ReserveIdentifier;
@@ -122,10 +125,12 @@ parameter_types! {
 	pub const GetNativeCurrencyId: CurrencyId = CurrencyId::Token(TokenSymbol::ACA);
 }
 
+// pub type AdaptedBasicCurrency = BasicCurrencyAdapter<Runtime, PalletBalances, i64, u64>;
+
 impl orml_currencies::Config for Test {
 	type GetNativeCurrencyId = GetNativeCurrencyId;
 	type MultiCurrency = Tokens;
-	type NativeCurrency = BasicCurrencyAdapter<Test, Balances, Amount, BlockNumber>;
+	type NativeCurrency = NativeCurrency;
 	type WeightInfo = ();
 }
 
@@ -141,7 +146,8 @@ impl pallet_difttt::Config for Test {
 	type WeightInfo = ();
 
 	type Currency = Currencies;
-	type SwapToken = Dex;
+	// type SwapToken = Dex;
+	type AuthorityId = pallet_difttt::crypto::TestAuthId;
 }
 
 parameter_types! {
