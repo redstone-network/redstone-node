@@ -1,19 +1,16 @@
 use super::*;
 use crate as pallet_difttt;
 use frame_support::{
-	pallet_prelude::{DispatchResult, Get},
+	pallet_prelude::DispatchResult,
 	parameter_types,
 	traits::{ConstU16, ConstU64, Nothing},
 	PalletId,
 };
 use frame_system as system;
-// use orml_currencies::BasicCurrencyAdapter;
-pub type NativeCurrency =
-	orml_currencies::BasicCurrencyAdapter<Test, Balances, Amount, BlockNumber>;
+
 use orml_traits::MultiReservableCurrency;
 use primitives::{
-	evm::EvmAddress, AccountIndex, Balance, BlockNumber, CurrencyId, Hash, Index, Moment,
-	ReserveIdentifier, TokenSymbol,
+	evm::EvmAddress, Balance, BlockNumber, CurrencyId, ReserveIdentifier, TokenSymbol,
 };
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -64,7 +61,7 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -113,7 +110,7 @@ impl orml_tokens::Config for Test {
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type OnDust = ();
-	type ReserveIdentifier = [u8; 8];
+	type ReserveIdentifier = ReserveIdentifier;
 	type WeightInfo = ();
 	type TransferProtectInterface = DiftttModule;
 	type OnNewTokenAccount = ();
@@ -130,7 +127,8 @@ parameter_types! {
 impl orml_currencies::Config for Test {
 	type GetNativeCurrencyId = GetNativeCurrencyId;
 	type MultiCurrency = Tokens;
-	type NativeCurrency = NativeCurrency;
+	type NativeCurrency =
+		orml_currencies::BasicCurrencyAdapter<Test, Balances, Amount, BlockNumber>; //BasicCurrencyAdapter<T, Currency, Amount, Moment>;
 	type WeightInfo = ();
 }
 
@@ -247,6 +245,6 @@ where
 }
 
 // Build genesis storage according to the mock runtime.
-pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-}
+// pub fn new_test_ext() -> sp_io::TestExternalities {
+// 	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+// }
