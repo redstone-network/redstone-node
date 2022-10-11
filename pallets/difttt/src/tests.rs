@@ -19,28 +19,26 @@ fn create_trigger_should_work() {
 		let price_gt = Triger::PriceGT(3, 3);
 		let price_lt = Triger::PriceLT(4, 4);
 
-		// assert create action
 		let singer = Public::from_raw([0; 32]);
 
+		// assert create action
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), timer));
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), schedule));
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), price_gt));
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), price_lt));
 
 		// check storage
-		assert_eq!(
-			MapTriger::<Test>::get(0),
-			Some(timer) // TrigerOwner::<T>::insert(user, triger_id, ());		            // NextTrigerId::<T>::put(triger_id.saturating_add(One::one()));
-		);
+		assert_eq!(MapTriger::<Test>::get(0), Some(timer));
+		assert_eq!(MapTriger::<Test>::get(1), Some(schedule));
+		assert_eq!(MapTriger::<Test>::get(2), Some(price_gt));
+		assert_eq!(MapTriger::<Test>::get(3), Some(price_lt));
 
-		// MapTriger::<T>::insert(triger_id, triger.clone());
-		// TrigerOwner::<T>::insert(user, triger_id, ());
-		// NextTrigerId::<T>::put(triger_id.saturating_add(One::one()));
+		assert_eq!(TrigerOwner::<Test>::get(singer, 0), Some(()));
+		assert_eq!(TrigerOwner::<Test>::get(singer, 1), Some(()));
+		assert_eq!(TrigerOwner::<Test>::get(singer, 2), Some(()));
+		assert_eq!(TrigerOwner::<Test>::get(singer, 3), Some(()));
 
-		// assert_eq!(
-		// 	TrigerOwner::<Test>::get(&singer, 0),
-		// 	Some(timer) // TrigerOwner::<T>::insert(user, triger_id, ());		            // NextTrigerId::<T>::put(triger_id.saturating_add(One::one()));
-		// );
+		assert_eq!(NextTrigerId::<Test>::take(), Some(4));
 	})
 
 	// #[test]
