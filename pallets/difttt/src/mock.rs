@@ -245,6 +245,6 @@ where
 }
 
 // Build genesis storage according to the mock runtime.
-// pub fn new_test_ext() -> sp_io::TestExternalities {
-// 	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-// }
+pub fn new_test_ext() -> sp_io::TestExternalities {
+	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+}
