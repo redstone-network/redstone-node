@@ -341,11 +341,11 @@ impl CurrencyId {
 	pub fn is_trading_pair_currency_id(&self) -> bool {
 		matches!(
 			self,
-			CurrencyId::Token(_)
-				| CurrencyId::Erc20(_)
-				| CurrencyId::LiquidCrowdloan(_)
-				| CurrencyId::ForeignAsset(_)
-				| CurrencyId::StableAssetPoolToken(_)
+			CurrencyId::Token(_) |
+				CurrencyId::Erc20(_) |
+				CurrencyId::LiquidCrowdloan(_) |
+				CurrencyId::ForeignAsset(_) |
+				CurrencyId::StableAssetPoolToken(_)
 		)
 	}
 
@@ -366,9 +366,8 @@ impl CurrencyId {
 			CurrencyId::Erc20(address) => DexShare::Erc20(address),
 			CurrencyId::LiquidCrowdloan(lease) => DexShare::LiquidCrowdloan(lease),
 			CurrencyId::ForeignAsset(foreign_asset_id) => DexShare::ForeignAsset(foreign_asset_id),
-			CurrencyId::StableAssetPoolToken(stable_asset_pool_id) => {
-				DexShare::StableAssetPoolToken(stable_asset_pool_id)
-			},
+			CurrencyId::StableAssetPoolToken(stable_asset_pool_id) =>
+				DexShare::StableAssetPoolToken(stable_asset_pool_id),
 			// Unsupported
 			CurrencyId::DexShare(..) => return None,
 		};
@@ -377,9 +376,8 @@ impl CurrencyId {
 			CurrencyId::Erc20(address) => DexShare::Erc20(address),
 			CurrencyId::LiquidCrowdloan(lease) => DexShare::LiquidCrowdloan(lease),
 			CurrencyId::ForeignAsset(foreign_asset_id) => DexShare::ForeignAsset(foreign_asset_id),
-			CurrencyId::StableAssetPoolToken(stable_asset_pool_id) => {
-				DexShare::StableAssetPoolToken(stable_asset_pool_id)
-			},
+			CurrencyId::StableAssetPoolToken(stable_asset_pool_id) =>
+				DexShare::StableAssetPoolToken(stable_asset_pool_id),
 			// Unsupported
 			CurrencyId::DexShare(..) => return None,
 		};
@@ -423,9 +421,8 @@ impl Into<CurrencyId> for DexShare {
 			DexShare::Erc20(address) => CurrencyId::Erc20(address),
 			DexShare::LiquidCrowdloan(lease) => CurrencyId::LiquidCrowdloan(lease),
 			DexShare::ForeignAsset(foreign_asset_id) => CurrencyId::ForeignAsset(foreign_asset_id),
-			DexShare::StableAssetPoolToken(stable_asset_pool_id) => {
-				CurrencyId::StableAssetPoolToken(stable_asset_pool_id)
-			},
+			DexShare::StableAssetPoolToken(stable_asset_pool_id) =>
+				CurrencyId::StableAssetPoolToken(stable_asset_pool_id),
 		}
 	}
 }
