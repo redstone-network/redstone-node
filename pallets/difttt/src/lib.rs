@@ -272,6 +272,7 @@ pub mod pallet {
 		/// parameters. [something, who]
 		TrigerCreated(u64, Triger<BalanceOf<T>>),
 		ActionCreated(u64, Action<T::AccountId>),
+		OffchainUnsignedTxError,
 		RecipeCreated(u64, Recipe),
 		RecipeRemoved(u64),
 		RecipeTurnOned(u64),
