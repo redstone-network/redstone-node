@@ -236,9 +236,9 @@ pub mod pallet {
 	/// Payload used by set recipe done to submit a transaction.
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct RecipeDonePayload<Public, BlockNumber> {
-		block_number: BlockNumber,
-		recipe_id: u64,
-		public: Public,
+		pub block_number: BlockNumber,
+		pub recipe_id: u64,
+		pub public: Public,
 	}
 
 	impl<T: SigningTypes> SignedPayload<T> for RecipeDonePayload<T::Public, T::BlockNumber> {
@@ -250,11 +250,11 @@ pub mod pallet {
 	/// Payload used by update recipe times to submit a transaction.
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct RecipeTimesPayload<Public, BlockNumber> {
-		block_number: BlockNumber,
-		recipe_id: u64,
-		times: u64,
-		timestamp: u64,
-		public: Public,
+		pub block_number: BlockNumber,
+		pub recipe_id: u64,
+		pub times: u64,
+		pub timestamp: u64,
+		pub public: Public,
 	}
 
 	impl<T: SigningTypes> SignedPayload<T> for RecipeTimesPayload<T::Public, T::BlockNumber> {
@@ -272,7 +272,7 @@ pub mod pallet {
 		/// parameters. [something, who]
 		TrigerCreated(u64, Triger<BalanceOf<T>>),
 		ActionCreated(u64, Action<T::AccountId>),
-		OffchainUnsignedTxError,
+		OffchainUnsignedTxError, // define twice ####
 		RecipeCreated(u64, Recipe),
 		RecipeRemoved(u64),
 		RecipeTurnOned(u64),
@@ -369,7 +369,9 @@ pub mod pallet {
 			RecipeOwner::<T>::insert(user, recipe_id, ());
 			NextRecipeId::<T>::put(recipe_id.saturating_add(One::one()));
 
+			log::info!("recipe create before ......");
 			Self::deposit_event(Event::RecipeCreated(recipe_id, recipe));
+			log::info!("recipe create after ......");
 
 			Ok(())
 		}

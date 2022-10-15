@@ -1,5 +1,5 @@
 use super::*;
-// use crate::mock::*;
+use crate::mock::*;
 
 use frame_support::{assert_noop, assert_ok, traits::ConstU32, BoundedVec};
 use frame_system::Call;
@@ -7,7 +7,7 @@ use frame_system::Call;
 use mock::{Event, *};
 use sp_core::{
 	offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
-	sr25519::Public,
+	sr25519::{Public, Signature},
 };
 use sp_keystore::{testing::KeyStore, KeystoreExt};
 use std::sync::Arc;
@@ -79,54 +79,15 @@ fn create_action_should_work() {
 
 		let oracle: Action<Public> = Action::Slack(a_u8_const32, b_u8_const128);
 
-		//construct same test inputs cases
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let a1_u8_const32: BoundedVec<u8, ConstU32<256>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const128: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
 		let signer = Public::from_raw([0; 32]);
 
-		let mail1_with_token = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
-
-		let oracle1: Action<Public> = Action::Slack(a1_u8_const32, b1_u8_const128);
-
-		let a2_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b2_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c2_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d2_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e2_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let mail2_with_token: Action<Public> = Action::MailWithToken(
-			a2_u8_const128,
-			b2_u8_const256,
-			c2_u8_const128,
-			d2_u8_const128,
-			e2_u8_const256,
-		);
-
-		let a2_u8_const32: BoundedVec<u8, ConstU32<256>> = vec![1, 2, 3].try_into().unwrap();
-		let b2_u8_const128: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let oracle2: Action<Public> = Action::Slack(a2_u8_const32, b2_u8_const128);
-
 		// assert create action
-		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
-		assert_ok!(DiftttModule::create_action(Origin::signed(signer), oracle));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token.clone()));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), oracle.clone()));
 
 		// assert storage
-		assert_eq!(MapAction::<Test>::get(0), Some(mail1_with_token));
-		assert_eq!(MapAction::<Test>::get(1), Some(oracle1));
+		assert_eq!(MapAction::<Test>::get(0), Some(mail_with_token.clone()));
+		assert_eq!(MapAction::<Test>::get(1), Some(oracle.clone()));
 
 		assert_eq!(ActionOwner::<Test>::get(signer, 0), Some(()));
 		assert_eq!(ActionOwner::<Test>::get(signer, 1), Some(()));
@@ -136,9 +97,9 @@ fn create_action_should_work() {
 		// assert event
 		// System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(
 		// 	0,
-		// 	mail2_with_token,
+		// 	mail_with_token,
 		// )));
-		// System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(1, oracle2)));
+		// System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(1, oracle)));
 	});
 }
 
@@ -165,7 +126,7 @@ fn create_recipe_should_work() {
 			e_u8_const256,
 		);
 
-		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token.clone()));
 		assert_ok!(DiftttModule::create_recipe(Origin::signed(signer), 0, 0));
 
 		let recipe = Recipe {
@@ -179,40 +140,15 @@ fn create_recipe_should_work() {
 			last_triger_timestamp: 0,
 		};
 
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let mail1_with_token = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
-
 		// assert storage
 		assert_eq!(MapTriger::<Test>::get(0), Some(timer));
-		assert_eq!(MapAction::<Test>::get(0), Some(mail1_with_token));
+		assert_eq!(MapAction::<Test>::get(0), Some(mail_with_token));
 		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe));
 		assert_eq!(RecipeOwner::<Test>::get(signer, 0), Some(()));
 		assert_eq!(NextRecipeId::<Test>::take(), Some(1));
 
-		let recipe1 = Recipe {
-			triger_id: 0,
-			action_id: 0,
-			enable: true,
-			is_forever: true,
-			times: 0,
-			max_times: 1,
-			done: false,
-			last_triger_timestamp: 0,
-		};
-
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeCreated(1, recipe1)));
+		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeCreated(1, recipe)));
 	})
 }
 #[test]
@@ -293,20 +229,6 @@ fn turn_on_recipe_should_work() {
 			e_u8_const256,
 		);
 
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let mail1_with_token: Action<Public> = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
-
 		let recipe = Recipe {
 			triger_id: 0,
 			action_id: 0,
@@ -331,7 +253,7 @@ fn turn_on_recipe_should_work() {
 
 		// assert create trigger , action and recipe
 		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
-		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token.clone()));
 
 		// assert create and turn off recipe
 		assert_ok!(DiftttModule::create_recipe(Origin::signed(signer), 0, 0));
@@ -339,12 +261,15 @@ fn turn_on_recipe_should_work() {
 
 		// assert storage
 		assert_eq!(MapTriger::<Test>::get(0), Some(timer));
-		assert_eq!(MapAction::<Test>::get(0), Some(mail1_with_token));
-		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe));
+		assert_eq!(MapAction::<Test>::get(0), Some(mail_with_token));
+		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe.clone()));
 
 		// assert turn on recipe
 		assert_ok!(DiftttModule::turn_on_recipe(Origin::signed(signer), 0));
 		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe1));
+
+		// assert event
+		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTurnOned(0)));
 	});
 }
 
@@ -366,32 +291,7 @@ fn turn_on_recipe_will_fail_when_recipe_id_not_exist() {
 			d_u8_const128,
 			e_u8_const256,
 		);
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
 
-		let mail1_with_token: Action<Public> = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
-
-		let recipe = Recipe {
-			triger_id: 0,
-			action_id: 0,
-			enable: true,
-			is_forever: true,
-			times: 0,
-			max_times: 1,
-			done: false,
-			last_triger_timestamp: 0,
-		};
-
-		// assert create trigger , action and recipe
 		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
 		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
 
@@ -413,7 +313,7 @@ fn turn_on_recipe_will_fail_when_signer_not_owner() {
 	new_test_ext().execute_with(|| {
 		let timer = Triger::Timer(1, 1);
 		let signer = Public::from_raw([0; 32]);
-		let signer1 = Public::from_raw([0; 32]);
+		let signer1 = Public::from_raw([1; 32]);
 
 		let a_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
 		let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
@@ -462,19 +362,6 @@ fn turn_off_recipe_should_work() {
 			d_u8_const128,
 			e_u8_const256,
 		);
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let mail1_with_token: Action<Public> = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
 
 		let recipe = Recipe {
 			triger_id: 0,
@@ -499,11 +386,11 @@ fn turn_off_recipe_should_work() {
 
 		// assert create trigger , action and recipe
 		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
-		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token.clone()));
 
 		// assert storage
 		assert_eq!(MapTriger::<Test>::get(0), Some(timer));
-		assert_eq!(MapAction::<Test>::get(0), Some(mail1_with_token));
+		assert_eq!(MapAction::<Test>::get(0), Some(mail_with_token));
 
 		// assert create and turn off recipe
 		assert_ok!(DiftttModule::create_recipe(Origin::signed(signer), 0, 0));
@@ -511,6 +398,9 @@ fn turn_off_recipe_should_work() {
 
 		assert_ok!(DiftttModule::turn_off_recipe(Origin::signed(signer), 0));
 		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe1));
+
+		// assert event
+		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTurnOffed(0)));
 	});
 }
 
@@ -532,30 +422,6 @@ fn turn_off_recipe_will_fail_when_recipe_id_not_exist() {
 			d_u8_const128,
 			e_u8_const256,
 		);
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let mail1_with_token: Action<Public> = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
-
-		let recipe = Recipe {
-			triger_id: 0,
-			action_id: 0,
-			enable: true,
-			is_forever: true,
-			times: 0,
-			max_times: 1,
-			done: false,
-			last_triger_timestamp: 0,
-		};
 
 		// assert create trigger , action and recipe
 		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
@@ -578,7 +444,7 @@ fn turn_off_recipe_will_fail_when_signer_not_owner() {
 	new_test_ext().execute_with(|| {
 		let timer = Triger::Timer(1, 1);
 		let signer = Public::from_raw([0; 32]);
-		let signer1 = Public::from_raw([0; 32]);
+		let signer1 = Public::from_raw([1; 32]);
 
 		let a_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
 		let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
@@ -613,7 +479,6 @@ fn del_recipe_should_work() {
 	new_test_ext().execute_with(|| {
 		let timer = Triger::Timer(1, 1);
 		let signer = Public::from_raw([0; 32]);
-		let signer1 = Public::from_raw([0; 32]);
 
 		let a_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
 		let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
@@ -644,6 +509,9 @@ fn del_recipe_should_work() {
 			DiftttModule::del_recipe(Origin::signed(signer), 0),
 			Error::<Test>::RecipeIdNotExist
 		);
+
+		// assert event
+		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeRemoved(0)));
 	});
 }
 
@@ -665,30 +533,6 @@ fn delete_recipe_will_fail_when_recipe_id_not_exist() {
 			d_u8_const128,
 			e_u8_const256,
 		);
-		let a1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let b1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-		let c1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let d1_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
-		let e1_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-
-		let mail1_with_token: Action<Public> = Action::MailWithToken(
-			a1_u8_const128,
-			b1_u8_const256,
-			c1_u8_const128,
-			d1_u8_const128,
-			e1_u8_const256,
-		);
-
-		let recipe = Recipe {
-			triger_id: 0,
-			action_id: 0,
-			enable: true,
-			is_forever: true,
-			times: 0,
-			max_times: 1,
-			done: false,
-			last_triger_timestamp: 0,
-		};
 
 		// assert create trigger , action and recipe
 		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
@@ -711,7 +555,7 @@ fn delete_recipe_will_fail_when_signer_not_owner() {
 	new_test_ext().execute_with(|| {
 		let timer = Triger::Timer(1, 1);
 		let signer = Public::from_raw([0; 32]);
-		let signer1 = Public::from_raw([0; 32]);
+		let signer1 = Public::from_raw([1; 32]);
 
 		let a_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
 		let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
@@ -739,5 +583,149 @@ fn delete_recipe_will_fail_when_signer_not_owner() {
 	});
 }
 
-// #[test]
-// fn set_recipe_done_unsigned_should_work() {}
+#[test]
+fn submit_recipe_done_with_signed_payload_should_work() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let signer1 = Signature::from_raw([0; 64]);
+
+		let timer = Triger::Timer(1, 1);
+
+		type BlockNumber = u64;
+
+		let a_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
+		let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
+		let c_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
+		let d_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
+		let e_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
+		let mail_with_token: Action<Public> = Action::MailWithToken(
+			a_u8_const128,
+			b_u8_const256,
+			c_u8_const128,
+			d_u8_const128,
+			e_u8_const256,
+		);
+
+		// assert create trigger , action and recipe
+		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
+
+		// assert create and turn off recipe
+		assert_ok!(DiftttModule::create_recipe(Origin::signed(signer), 0, 0));
+
+		let block_number: BlockNumber = 64; //区块问题
+
+		let recipe_done_payload: RecipeDonePayload<Public, BlockNumber> =
+			RecipeDonePayload { block_number, recipe_id: 0, public: signer };
+
+		assert_ok!(DiftttModule::submit_recipe_done_with_signed_payload(
+			Origin::none(),
+			recipe_done_payload,
+			signer1
+		));
+
+
+		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeDone(0)));
+	});
+}
+
+#[test]
+fn submit_recipe_done_with_signed_payload_will_fail_when_recipe_id_not_exist() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let signer1 = Signature::from_raw([0; 64]);
+
+		type BlockNumber = u64;
+
+		let block_number: BlockNumber = 64; //区块问题
+
+		let recipe_done_payload: RecipeDonePayload<Public, BlockNumber> =
+			RecipeDonePayload { block_number, recipe_id: 0, public: signer };
+
+		// recipe id 0 is not exist
+		assert_noop!(
+			DiftttModule::submit_recipe_done_with_signed_payload(
+				Origin::none(),
+				recipe_done_payload,
+				signer1
+			),
+			Error::<Test>::RecipeIdNotExist
+		);
+	});
+}
+
+#[test]
+fn submit_recipe_triger_times_with_signed_payload_should_work() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let signer1 = Signature::from_raw([0; 64]);
+
+		let timer = Triger::Timer(1, 1);
+
+		type BlockNumber = u64;
+
+		let a_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
+		let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
+		let c_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
+		let d_u8_const128: BoundedVec<u8, ConstU32<128>> = vec![1, 2, 3].try_into().unwrap();
+		let e_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
+		let mail_with_token: Action<Public> = Action::MailWithToken(
+			a_u8_const128,
+			b_u8_const256,
+			c_u8_const128,
+			d_u8_const128,
+			e_u8_const256,
+		);
+
+		// assert create trigger , action and recipe
+		assert_ok!(DiftttModule::create_triger(Origin::signed(signer), timer));
+		assert_ok!(DiftttModule::create_action(Origin::signed(signer), mail_with_token));
+
+		// assert create and turn off recipe
+		assert_ok!(DiftttModule::create_recipe(Origin::signed(signer), 0, 0));
+
+		let block_number: BlockNumber = 64; //区块问题
+		let times: u64 = 10;
+		let timestamp: u64 = 10;
+
+		let recipe_times_payload: RecipeTimesPayload<Public, BlockNumber> =
+			RecipeTimesPayload { block_number, recipe_id: 0, times, timestamp, public: signer };
+
+		assert_ok!(DiftttModule::submit_recipe_triger_times_with_signed_payload(
+			Origin::none(),
+			recipe_times_payload,
+			signer1
+		));
+
+		// assert event
+		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTrigerTimesUpdated(0,times,timestamp)));
+	});
+}
+
+
+#[test]
+fn submit_recipe_triger_times_with_signed_payload_will_fail_when_recipe_not_exist() {
+	new_test_ext().execute_with(|| {
+		
+		let signer = Public::from_raw([0; 32]);
+		let signer1 = Signature::from_raw([0; 64]);
+
+		type BlockNumber = u64;
+		let block_number: BlockNumber = 64; //区块问题
+		let times: u64 = 10;
+		let timestamp: u64 = 10;
+
+		let recipe_times_payload: RecipeTimesPayload<Public, BlockNumber> =
+			RecipeTimesPayload { block_number, recipe_id: 0, times, timestamp, public: signer };
+
+		// recipe id 0 is not exist
+		assert_noop!(
+			DiftttModule::submit_recipe_triger_times_with_signed_payload(
+				Origin::none(),
+				recipe_times_payload,
+				signer1
+			),
+			Error::<Test>::RecipeIdNotExist
+		);
+	});
+}
