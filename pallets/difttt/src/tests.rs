@@ -26,6 +26,7 @@ fn create_trigger_should_work() {
 
 		// assert create trigger
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), timer));
+
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), schedule));
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), price_gt));
 		assert_ok!(DiftttModule::create_triger(Origin::signed(singer), price_lt));
@@ -49,10 +50,11 @@ fn create_trigger_should_work() {
 		assert_eq!(TxBlockLimit::<Test>::take(), Some(10));
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::TrigerCreated(0, timer)));
-		// System::assert_has_event(TestEvent::DiftttModule(Event::TrigerCreated(1, schedule)));
-		// System::assert_has_event(TestEvent::DiftttModule(Event::TrigerCreated(2, price_gt)));
-		// System::assert_has_event(TestEvent::DiftttModule(Event::TrigerCreated(3, price_lt)));
+		println!("_______{},{:?}", 0, timer);
+		System::assert_has_event(Event::DiftttModule(crate::Event::TrigerCreated(0, timer)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::TrigerCreated(1, schedule)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::TrigerCreated(2, price_gt)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::TrigerCreated(3, price_lt)));
 	})
 }
 
@@ -95,11 +97,11 @@ fn create_action_should_work() {
 		assert_eq!(NextActionId::<Test>::take(), Some(2));
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(
-		// 	0,
-		// 	mail_with_token,
-		// )));
-		// System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(1, oracle)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(
+			0,
+			mail_with_token,
+		)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::ActionCreated(1, oracle)));
 	});
 }
 
@@ -143,12 +145,12 @@ fn create_recipe_should_work() {
 		// assert storage
 		assert_eq!(MapTriger::<Test>::get(0), Some(timer));
 		assert_eq!(MapAction::<Test>::get(0), Some(mail_with_token));
-		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe));
+		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe.clone()));
 		assert_eq!(RecipeOwner::<Test>::get(signer, 0), Some(()));
 		assert_eq!(NextRecipeId::<Test>::take(), Some(1));
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeCreated(1, recipe)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::RecipeCreated(0, recipe)));
 	})
 }
 #[test]
@@ -269,7 +271,7 @@ fn turn_on_recipe_should_work() {
 		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe1));
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTurnOned(0)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTurnOned(0)));
 	});
 }
 
@@ -400,7 +402,7 @@ fn turn_off_recipe_should_work() {
 		assert_eq!(MapRecipe::<Test>::get(0), Some(recipe1));
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTurnOffed(0)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTurnOffed(0)));
 	});
 }
 
@@ -511,7 +513,7 @@ fn del_recipe_should_work() {
 		);
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeRemoved(0)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::RecipeRemoved(0)));
 	});
 }
 
@@ -624,8 +626,7 @@ fn submit_recipe_done_with_signed_payload_should_work() {
 			signer1
 		));
 
-
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeDone(0)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::RecipeDone(0)));
 	});
 }
 
@@ -698,15 +699,15 @@ fn submit_recipe_triger_times_with_signed_payload_should_work() {
 		));
 
 		// assert event
-		// System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTrigerTimesUpdated(0,times,timestamp)));
+		System::assert_has_event(Event::DiftttModule(crate::Event::RecipeTrigerTimesUpdated(
+			0, times, timestamp,
+		)));
 	});
 }
-
 
 #[test]
 fn submit_recipe_triger_times_with_signed_payload_will_fail_when_recipe_not_exist() {
 	new_test_ext().execute_with(|| {
-		
 		let signer = Public::from_raw([0; 32]);
 		let signer1 = Signature::from_raw([0; 64]);
 
