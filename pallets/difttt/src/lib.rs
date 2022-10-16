@@ -318,7 +318,7 @@ pub mod pallet {
 				},
 				_ => {},
 			}
-			println!("#########@@@@{},{:?}", triger_id, triger);
+		
 			Self::deposit_event(Event::TrigerCreated(triger_id, triger));
 
 			Ok(())
