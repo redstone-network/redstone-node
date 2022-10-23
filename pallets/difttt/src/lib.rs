@@ -63,6 +63,11 @@ pub enum Action<AccountId> {
 	), //revicer, title, body
 	Slack(BoundedVec<u8, ConstU32<256>>, BoundedVec<u8, ConstU32<256>>), /*slack_hook_url,
 	                                                                      * message */
+	Discord(
+		BoundedVec<u8, ConstU32<256>>,
+		BoundedVec<u8, ConstU32<64>>,
+		BoundedVec<u8, ConstU32<256>>,
+	), /* discord_hook_url, username, content */
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]

@@ -1249,6 +1249,10 @@ impl pallet_dex::Config for Runtime {
 	type OnLiquidityPoolUpdated = ();
 }
 
+impl pallet_notification::Config for Runtime {
+	type Event = Event;
+}
+
 parameter_types! {
 	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
 	/// We prioritize im-online heartbeats over election solution submission.
@@ -1657,6 +1661,7 @@ construct_runtime!(
 		Tokens: orml_tokens,
 		Currencies: orml_currencies,
 		Dex: pallet_dex,
+		Notification: pallet_notification,
 	}
 );
 
