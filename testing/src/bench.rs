@@ -95,7 +95,7 @@ pub fn drop_system_cache() {
 			target: "bench-logistics",
 			"Clearing system cache on windows is not supported. Benchmark might totally be wrong.",
 		);
-		return
+		return;
 	}
 
 	std::process::Command::new("sync")
@@ -291,7 +291,7 @@ impl<'a> Iterator for BlockContentIterator<'a> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		if self.content.size.map(|size| size <= self.iteration).unwrap_or(false) {
-			return None
+			return None;
 		}
 
 		let sender = self.keyring.at(self.iteration);
@@ -307,11 +307,12 @@ impl<'a> Iterator for BlockContentIterator<'a> {
 					signed_extra(0, node_runtime::ExistentialDeposit::get() + 1),
 				)),
 				function: match self.content.block_type {
-					BlockType::RandomTransfersKeepAlive =>
+					BlockType::RandomTransfersKeepAlive => {
 						Call::Balances(BalancesCall::transfer_keep_alive {
 							dest: sp_runtime::MultiAddress::Id(receiver),
 							value: node_runtime::ExistentialDeposit::get() + 1,
-						}),
+						})
+					},
 					BlockType::RandomTransfersReaping => {
 						Call::Balances(BalancesCall::transfer {
 							dest: sp_runtime::MultiAddress::Id(receiver),

@@ -1,17 +1,16 @@
 use super::*;
 use crate as pallet_difttt;
 use frame_support::{
-	pallet_prelude::{DispatchResult, Get},
+	pallet_prelude::DispatchResult,
 	parameter_types,
 	traits::{ConstU16, ConstU64, Nothing},
 	PalletId,
 };
 use frame_system as system;
-use orml_currencies::BasicCurrencyAdapter;
+
 use orml_traits::MultiReservableCurrency;
 use primitives::{
-	evm::EvmAddress, AccountIndex, Balance, BlockNumber, CurrencyId, Hash, Index, Moment,
-	ReserveIdentifier, TokenSymbol,
+	evm::EvmAddress, Balance, BlockNumber, CurrencyId, ReserveIdentifier, TokenSymbol,
 };
 use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
@@ -62,7 +61,7 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -87,7 +86,8 @@ impl pallet_balances::Config for Test {
 	type DustRemoval = ();
 	type Event = Event;
 	type ExistentialDeposit = ExistentialDeposit;
-	type AccountStore = pallet_balances::AccountData<u128>;
+	// type AccountStore = pallet_balances::AccountData<u128>;
+	type AccountStore = System;
 	type MaxLocks = ();
 	type MaxReserves = MaxReserves;
 	type ReserveIdentifier = ReserveIdentifier;
@@ -110,7 +110,7 @@ impl orml_tokens::Config for Test {
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type OnDust = ();
-	type ReserveIdentifier = [u8; 8];
+	type ReserveIdentifier = ReserveIdentifier;
 	type WeightInfo = ();
 	type TransferProtectInterface = DiftttModule;
 	type OnNewTokenAccount = ();
@@ -122,10 +122,13 @@ parameter_types! {
 	pub const GetNativeCurrencyId: CurrencyId = CurrencyId::Token(TokenSymbol::ACA);
 }
 
+// pub type AdaptedBasicCurrency = BasicCurrencyAdapter<Runtime, PalletBalances, i64, u64>;
+
 impl orml_currencies::Config for Test {
 	type GetNativeCurrencyId = GetNativeCurrencyId;
 	type MultiCurrency = Tokens;
-	type NativeCurrency = BasicCurrencyAdapter<Test, Balances, Amount, BlockNumber>;
+	type NativeCurrency =
+		orml_currencies::BasicCurrencyAdapter<Test, Balances, Amount, BlockNumber>; //BasicCurrencyAdapter<T, Currency, Amount, Moment>;
 	type WeightInfo = ();
 }
 
@@ -141,7 +144,8 @@ impl pallet_difttt::Config for Test {
 	type WeightInfo = ();
 
 	type Currency = Currencies;
-	type SwapToken = Dex;
+	// type SwapToken = Dex;
+	type AuthorityId = pallet_difttt::crypto::TestAuthId;
 }
 
 parameter_types! {
@@ -242,5 +246,8 @@ where
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let storage = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	let mut ext = sp_io::TestExternalities::from(storage);
+	ext.execute_with(|| System::set_block_number(1));
+	ext
 }

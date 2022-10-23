@@ -65,6 +65,7 @@ std = [
 	"sp-core/std",
 	"pallet-timestamp/std",
 	"pallet-balances/std",
+	"pallet-dex/std"
 ]
 
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]

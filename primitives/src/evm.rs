@@ -229,7 +229,7 @@ mod convert {
 	/// Convert decimal from native(KAR/ACA 12) to EVM(18).
 	pub fn convert_decimals_to_evm<B: Zero + Saturating + From<u32>>(b: B) -> B {
 		if b.is_zero() {
-			return b
+			return b;
 		}
 		b.saturating_mul(DECIMALS_VALUE.into())
 	}
@@ -241,7 +241,7 @@ mod convert {
 		b: B,
 	) -> Option<B> {
 		if b.is_zero() {
-			return Some(b)
+			return Some(b);
 		}
 		let res = b
 			.checked_div(&Into::<B>::into(DECIMALS_VALUE))
