@@ -1184,6 +1184,10 @@ impl pallet_difttt::Config for Runtime {
 	type AuthorityId = pallet_difttt::crypto::TestAuthId;
 }
 
+impl pallet_defense::Config for Runtime {
+	type Event = Event;
+}
+
 parameter_types! {
 	pub const GetExchangeFee: (u32, u32) = (3, 1000);	// 0.3%
 	pub const ExtendedProvisioningBlocks: BlockNumber = 2 * DAYS;
@@ -1658,6 +1662,7 @@ construct_runtime!(
 		Tokens: orml_tokens,
 		Currencies: orml_currencies,
 		Dex: pallet_dex,
+		DefenseModule: pallet_defense,
 	}
 );
 

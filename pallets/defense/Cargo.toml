@@ -1,0 +1,72 @@
+[package]
+name = "pallet-defense"
+version = "4.0.0-dev"
+description = "FRAME pallet difttt for defining custom runtime logic."
+authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
+homepage = "https://substrate.io/"
+edition = "2021"
+license = "Unlicense"
+publish = false
+repository = "https://github.com/difttt/difttt-node"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+serde = { version = "1.0.136", default-features = false, features = ['derive'] }
+serde_json = { version = '1.0.81', default-features = false, features = ['alloc'] }
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = [
+	"derive",
+] }
+scale-info = { version = "2.0.1", default-features = false, features = ["derive"] }
+frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24"}
+frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24", optional = true }
+sp-runtime = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+sp-std = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+pallet-timestamp = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+sp-io = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+log = { version = "0.4.14", default-features = false }
+lite-json = { version = "0.1", default-features = false }
+data-encoding = { version = "2.3.2", default-features = false, features = ["alloc"] }
+
+
+primitives = { package = "acala-primitives", path = "../../primitives", default-features = false }
+
+orml-traits = { default-features = false,  path = "../../open-runtime-module-library/traits" }
+orml-utilities = { default-features = false, path = "../../open-runtime-module-library/utilities" }
+pallet-dex = { version = "2.8.2", default-features = false, path = "../dex"}
+support = { package = "module-support", path = "../support", default-features = false }
+
+[dev-dependencies]
+sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+sp-io = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+sp-runtime = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+sp-keystore = { default-features = false, version = "0.12.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
+orml-traits = { default-features = false,  path = "../../open-runtime-module-library/traits" }
+orml-tokens = { path = "../../open-runtime-module-library/tokens" }
+orml-currencies = { path = "../../open-runtime-module-library/currencies" }
+orml-utilities = { default-features = false, path = "../../open-runtime-module-library/utilities" }
+pallet-dex = { version = "2.8.2", default-features = false, path = "../dex"}
+support = { package = "module-support", path = "../support", default-features = false }
+pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"scale-info/std",
+	"frame-support/std",
+	"frame-system/std",
+	"frame-benchmarking/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-core/std",
+	"pallet-timestamp/std",
+	"pallet-balances/std",
+	"pallet-dex/std"
+]
+
+runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
+try-runtime = ["frame-support/try-runtime"]

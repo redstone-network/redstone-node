@@ -4425,6 +4425,7 @@ dependencies = [
  "pallet-contracts-primitives",
  "pallet-contracts-rpc-runtime-api",
  "pallet-conviction-voting",
+ "pallet-defense",
  "pallet-democracy",
  "pallet-dex",
  "pallet-difttt",
@@ -5069,6 +5070,36 @@ dependencies = [
  "scale-info",
  "serde",
  "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-defense"
+version = "4.0.0-dev"
+dependencies = [
+ "acala-primitives",
+ "data-encoding",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "lite-json",
+ "log",
+ "module-support",
+ "orml-currencies",
+ "orml-tokens",
+ "orml-traits",
+ "orml-utilities",
+ "pallet-balances",
+ "pallet-dex",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "serde_json",
+ "sp-core",
+ "sp-io",
+ "sp-keystore",
  "sp-runtime",
  "sp-std",
 ]
