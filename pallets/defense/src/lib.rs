@@ -1,8 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 
 #[cfg(test)]
@@ -14,8 +11,31 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+use codec::{Decode, Encode, MaxEncodedLen};
+use frame_support::{traits::ConstU32, BoundedVec};
+use scale_info::TypeInfo;
+use sp_runtime::RuntimeDebug;
+use sp_std::cmp::{Eq, PartialEq};
+
+#[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub enum TransferLimit {
+	AmountLimit(u64, u64), // limit per transaction
+	TimesLimit(u64, u64),  // limit on transactions per 100 blocks
+}
+
+#[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub enum RiskManagement {
+	TimeFreeze(u64, u64), // freeze duration
+	AccountFreeze(u64),
+	Mail(
+		BoundedVec<u8, ConstU32<256>>, // receiver
+		BoundedVec<u8, ConstU32<256>>, // title
+		BoundedVec<u8, ConstU32<256>>, // message body
+	),
+}
 #[frame_support::pallet]
 pub mod pallet {
+	use super::*;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
 
@@ -30,13 +50,19 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/main-docs/build/runtime-storage/
 	#[pallet::storage]
 	#[pallet::getter(fn something)]
 	// Learn more about declaring storage items:
 	// https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
 	pub type Something<T> = StorageValue<_, u32>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn map_transfer_limit)]
+	pub(super) type MapTransferLimit<T: Config> = StorageMap<_, Twox64Concat, u64, TransferLimit>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn map_risk_management)]
+	pub(super) type MapRiskManagement<T: Config> = StorageMap<_, Twox64Concat, u64, RiskManagement>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
