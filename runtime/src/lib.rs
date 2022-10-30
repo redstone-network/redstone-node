@@ -1186,6 +1186,7 @@ impl pallet_difttt::Config for Runtime {
 
 impl pallet_defense::Config for Runtime {
 	type Event = Event;
+	type Currency = Balances;
 }
 
 parameter_types! {

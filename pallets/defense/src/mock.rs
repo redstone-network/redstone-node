@@ -7,6 +7,8 @@ use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 };
 
+use primitives::Balance;
+
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -51,6 +53,7 @@ impl system::Config for Test {
 
 impl pallet_defense::Config for Test {
 	type Event = Event;
+	type Currency = Balances;
 }
 
 // Build genesis storage according to the mock runtime.
