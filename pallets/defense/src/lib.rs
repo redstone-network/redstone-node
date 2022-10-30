@@ -26,7 +26,7 @@ pub enum TransferLimit {
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum RiskManagement {
 	TimeFreeze(u64, u64), // freeze duration
-	AccountFreeze(u64),
+	AccountFreeze(bool),
 	Mail(
 		BoundedVec<u8, ConstU32<256>>, // receiver
 		BoundedVec<u8, ConstU32<256>>, // title
@@ -95,6 +95,7 @@ pub mod pallet {
 		RiskManagementTimeFreezeSet(T::AccountId, RiskManagement),
 		RiskManagementAccountFreezeSet(T::AccountId, RiskManagement),
 		RiskManagementMailSet(T::AccountId, RiskManagement),
+		RiskManagementMailUpdated(T::AccountId, RiskManagement),
 	}
 
 	#[pallet::error]
@@ -103,7 +104,6 @@ pub mod pallet {
 		StorageOverflow,
 		FreezeTimeHasSet,
 		FreezeAccountHasSet,
-		NotifyMailHasSet,
 	}
 
 	#[pallet::call]
@@ -179,7 +179,6 @@ pub mod pallet {
 								log::info!(
 									"--------------------------------update transfer amount"
 								);
-								MapTransferLimit::<T>::insert(i, transfer_limit.clone());
 								MapTransferLimit::<T>::mutate(&i, |v| {
 									*v = Some(transfer_limit.clone())
 								});
@@ -220,7 +219,6 @@ pub mod pallet {
 								MapTransferLimit::<T>::get(i)
 							{
 								log::info!("--------------------------------update transfer times");
-								MapTransferLimit::<T>::insert(i, transfer_limit.clone());
 								MapTransferLimit::<T>::mutate(&i, |v| {
 									*v = Some(transfer_limit.clone())
 								});
@@ -300,80 +298,100 @@ pub mod pallet {
 				let mut freeze_account_set = false;
 				let mut notify_mail_set = false;
 
-				for i in 0..risk_management_id {
-					match MapRiskManagement::<T>::get(i) {
-						Some(RiskManagement::TimeFreeze(_, _)) => {
-							freeze_time_set = true;
-						},
-						Some(RiskManagement::AccountFreeze(_)) => {
-							freeze_account_set = true;
-						},
-						Some(RiskManagement::Mail(_, _, _)) => {
-							notify_mail_set = true;
-						},
-						None => {
-							log::info!("--------------------------------get nothing");
-						},
-					}
-
-					match risk_management {
-						RiskManagement::TimeFreeze(_, _) => {
-							if freeze_time_set == true {
-								Error::<T>::FreezeTimeHasSet;
-							} else {
-								MapRiskManagement::<T>::insert(
-									risk_management_id,
-									risk_management.clone(),
+				match risk_management {
+					RiskManagement::TimeFreeze(_, _) => {
+						for i in 0..risk_management_id {
+							if let Some(RiskManagement::TimeFreeze(_, _)) =
+								MapRiskManagement::<T>::get(&i)
+							{
+								freeze_time_set = true;
+								ensure!(
+									!MapRiskManagement::<T>::contains_key(&i),
+									Error::<T>::FreezeTimeHasSet
 								);
-								RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-								NextRiskManagementId::<T>::put(
-									risk_management_id.saturating_add(One::one()),
-								);
+							}
+						}
+						if freeze_time_set == false {
+							MapRiskManagement::<T>::insert(
+								risk_management_id,
+								risk_management.clone(),
+							);
+							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
+							NextRiskManagementId::<T>::put(
+								risk_management_id.saturating_add(One::one()),
+							);
 
-								Self::deposit_event(Event::RiskManagementTimeFreezeSet(
+							Self::deposit_event(Event::RiskManagementTimeFreezeSet(
+								who.clone(),
+								risk_management.clone(),
+							));
+						}
+					},
+					RiskManagement::AccountFreeze(_) => {
+						for i in 0..risk_management_id {
+							if let Some(RiskManagement::AccountFreeze(_)) =
+								MapRiskManagement::<T>::get(&i)
+							{
+								freeze_account_set = true;
+								ensure!(
+									!MapRiskManagement::<T>::contains_key(&i),
+									Error::<T>::FreezeAccountHasSet
+								);
+							}
+						}
+						if freeze_account_set == false {
+							MapRiskManagement::<T>::insert(
+								risk_management_id,
+								risk_management.clone(),
+							);
+							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
+							NextRiskManagementId::<T>::put(
+								risk_management_id.saturating_add(One::one()),
+							);
+
+							Self::deposit_event(Event::RiskManagementAccountFreezeSet(
+								who.clone(),
+								risk_management.clone(),
+							));
+						}
+					},
+					RiskManagement::Mail(_, _, _) => {
+						for i in 0..risk_management_id {
+							if let Some(RiskManagement::Mail(_, _, _)) =
+								MapRiskManagement::<T>::get(&i)
+							{
+								notify_mail_set = true;
+
+								log::info!("--------------------------------update notify email");
+
+								// MapTransferLimit::<T>::insert(i, transfer_limit.clone());
+								MapRiskManagement::<T>::mutate(&i, |v| {
+									*v = Some(risk_management.clone())
+								});
+								log::info!("change notify mail successfully");
+
+								Self::deposit_event(Event::RiskManagementMailUpdated(
 									who.clone(),
 									risk_management.clone(),
 								));
 							}
-						},
-						RiskManagement::AccountFreeze(_) => {
-							if freeze_account_set == true {
-								Error::<T>::FreezeAccountHasSet;
-							} else {
-								MapRiskManagement::<T>::insert(
-									risk_management_id,
-									risk_management.clone(),
-								);
-								RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-								NextRiskManagementId::<T>::put(
-									risk_management_id.saturating_add(One::one()),
-								);
-
-								Self::deposit_event(Event::RiskManagementAccountFreezeSet(
-									who.clone(),
-									risk_management.clone(),
-								));
-							}
-						},
-						RiskManagement::Mail(_, _, _) => {
-							if notify_mail_set == true {
-								Error::<T>::NotifyMailHasSet;
-							} else {
-								MapRiskManagement::<T>::insert(
-									risk_management_id,
-									risk_management.clone(),
-								);
-								RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-								NextRiskManagementId::<T>::put(
-									risk_management_id.saturating_add(One::one()),
-								);
-								Self::deposit_event(Event::RiskManagementMailSet(
-									who.clone(),
-									risk_management.clone(),
-								));
-							}
-						},
-					}
+						}
+						if notify_mail_set == false {
+							log::info!("--------------------------------set notify mail");
+							MapRiskManagement::<T>::insert(
+								risk_management_id,
+								risk_management.clone(),
+							);
+							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
+							NextRiskManagementId::<T>::put(
+								risk_management_id.saturating_add(One::one()),
+							);
+							Self::deposit_event(Event::RiskManagementMailSet(
+								who.clone(),
+								risk_management.clone(),
+							));
+						}
+					},
 				}
 			}
 
