@@ -100,7 +100,6 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		SomethingStored(u32, T::AccountId),
 		TransferAmountLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),
 		TransferTimesLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),
 		TransferAmountLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>),
@@ -114,8 +113,6 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		NoneValue,
-		StorageOverflow,
 		FreezeTimeHasSet,
 		FreezeAccountHasSet,
 		TransferValueTooLarge,
