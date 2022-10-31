@@ -16,6 +16,7 @@ use frame_support::{traits::ConstU32, BoundedVec};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::cmp::{Eq, PartialEq};
+use sp_std::vec;
 
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum TransferLimit<Balance> {
@@ -34,6 +35,8 @@ pub enum RiskManagement {
 	),
 }
 
+use sp_runtime::offchain::http;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -43,7 +46,6 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::One;
 	use sp_runtime::traits::SaturatedConversion;
-
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -585,7 +587,25 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
 			log::info!("Hi World from defense-pallet workers!: {:?}", block_number);
+
+			let a_u8_const128: BoundedVec<u8, ConstU32<256>> = vec![1, 2, 3].try_into().unwrap();
+			let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
+			let c_u8_const128: BoundedVec<u8, ConstU32<256>> = vec![7, 8, 9].try_into().unwrap();
+
+			let mail_content = RiskManagement::Mail(a_u8_const128, b_u8_const256, c_u8_const128);
+
+			// set a flag to indicate that should notify user with mail message
+			// check the flag in offchain worker
+			// send or not send email content by http post
+			// start local email server get post request
+
+			// email::notification(mail_content);
 		}
 	}
-	impl<T: Config> Pallet<T> {}
+	impl<T: Config> Pallet<T> {
+		fn email_notification(mail: RiskManagement) -> Result<u64, http::Error> {
+			log::info!("--------------------------------maybe send email notification");
+			Ok(0)
+		}
+	}
 }
