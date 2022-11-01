@@ -18,14 +18,11 @@ use sp_runtime::traits::One;
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
 
-type BalanceOf<T> =
-	<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
 type FriendsOf<T> = BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxFriends>;
 
 /// An active recovery process.
 #[derive(Clone, Eq, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct ActiveCapture<BlockNumber, Friends> {
+pub struct ActiveCapture<BlockNumber, Friends, CaptureStatue> {
 	/// The block number when the capture process started.
 	created: BlockNumber,
 	/// The friends which have vouched so far. Always sorted.
@@ -34,6 +31,8 @@ pub struct ActiveCapture<BlockNumber, Friends> {
 
 	execute_proposal_id: u64,
 	cancel_proposal_id: u64,
+
+	capture_statue: CaptureStatue,
 }
 
 /// Configuration for recovering an account.
@@ -52,10 +51,16 @@ pub enum ProposalType {
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub enum ProposalStatue {
-	Canceled,
+pub enum CaptureStatue {
 	Processing,
-	AllDone,
+	Canceled,
+	PermissionTaken,
+}
+
+#[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub enum ProposalStatue {
+	Processing,
+	End,
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -117,7 +122,7 @@ pub mod pallet {
 		T::AccountId,
 		Twox64Concat,
 		T::AccountId,
-		ActiveCapture<T::BlockNumber, FriendsOf<T>>,
+		ActiveCapture<T::BlockNumber, FriendsOf<T>, CaptureStatue>,
 	>;
 
 	#[pallet::storage]
@@ -150,6 +155,8 @@ pub mod pallet {
 		MaxFriends,
 		NotStarted,
 		AlreadyApproved,
+		ProposalNotExist,
+		ProposalNotEnd,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -171,16 +178,17 @@ pub mod pallet {
 
 			let next_proposal_id = NextProposalId::<T>::get().unwrap_or_default();
 
-			let capture_status = ActiveCapture {
+			let active_capture = ActiveCapture {
 				created: <frame_system::Pallet<T>>::block_number(),
 				friends_approve: Default::default(),
 				friends_cancel: Default::default(),
 
 				execute_proposal_id: next_proposal_id,
 				cancel_proposal_id: Default::default(),
+				capture_statue: CaptureStatue::Processing,
 			};
 
-			<ActiveCaptures<T>>::insert(&account, &multisig_account, capture_status);
+			<ActiveCaptures<T>>::insert(&account, &multisig_account, active_capture);
 
 			let proposal = Proposal {
 				proposal_type: ProposalType::ExecuteCapture,
@@ -236,40 +244,87 @@ pub mod pallet {
 			Proposals::<T>::insert(next_proposal_id, proposal);
 			NextProposalId::<T>::set(Some(next_proposal_id.saturating_add(One::one())));
 
-			// {
-			// 	let active_capture =
-			// 		<ActiveCaptures<T>>::take(&who, &account).ok_or(Error::<T>::NotStarted)?;
-			// }
-
 			Ok(())
 		}
 
 		#[pallet::weight(0)]
 		pub fn vote(
 			origin: OriginFor<T>, //friends
-			_proposal_id: u64,    //capture owner
+			proposal_id: u64,     //capture owner
 			_vote: u16,           //0: approve, 1:  deny
 		) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+			let who = ensure_signed(origin)?;
 
-			// let capture_config =
-			// 	Self::capture_config(&account).ok_or(Error::<T>::NotCaptureable)?;
+			let proposal = Self::proposals(&proposal_id).ok_or(Error::<T>::ProposalNotExist)?;
+			ensure!(proposal.statue != ProposalStatue::End, Error::<T>::ProposalNotEnd);
 
-			// let mut active_capture =
-			// 	Self::active_capture(&account, &account_multisig).ok_or(Error::<T>::NotStarted)?;
+			let capture_config =
+				Self::capture_config(&proposal.capture_owner).ok_or(Error::<T>::NotCaptureable)?;
 
-			// match active_capture.friends.binary_search(&who) {
-			// 	Ok(_pos) => return Err(Error::<T>::AlreadyApproved.into()),
-			// 	Err(pos) => active_capture
-			// 		.friends
-			// 		.try_insert(pos, who.clone())
-			// 		.map_err(|()| Error::<T>::MaxFriends)?,
-			// }
-			// <ActiveCaptures<T>>::insert(&account, &account_multisig, &active_capture);
+			let mut active_capture =
+				Self::active_capture(&proposal.capture_owner, &proposal.multisig_account)
+					.ok_or(Error::<T>::NotStarted)?;
 
-			// if capture_config.threshold as usize <= active_capture.friends.len() {
-			// 	<MapPermissionTaken<T>>::insert(account, ());
-			// }
+			match proposal.proposal_type.clone() {
+				ProposalType::ExecuteCapture => {
+					match active_capture.friends_approve.binary_search(&who) {
+						Ok(_pos) => return Err(Error::<T>::AlreadyApproved.into()),
+						Err(pos) => active_capture
+							.friends_approve
+							.try_insert(pos, who.clone())
+							.map_err(|()| Error::<T>::MaxFriends)?,
+					}
+					<ActiveCaptures<T>>::insert(
+						&proposal.capture_owner,
+						&proposal.multisig_account,
+						&active_capture,
+					);
+
+					if capture_config.threshold as usize <= active_capture.friends_approve.len() {
+						<ActiveCaptures<T>>::insert(
+							&proposal.capture_owner,
+							&proposal.multisig_account,
+							ActiveCapture {
+								capture_statue: CaptureStatue::PermissionTaken,
+								..active_capture
+							},
+						);
+
+						Self::set_proposal_end(active_capture.execute_proposal_id)?;
+						Self::set_proposal_end(active_capture.cancel_proposal_id)?;
+
+						<MapPermissionTaken<T>>::insert(&proposal.capture_owner, ());
+					}
+				},
+				ProposalType::Cancel => {
+					match active_capture.friends_cancel.binary_search(&who) {
+						Ok(_pos) => return Err(Error::<T>::AlreadyApproved.into()),
+						Err(pos) => active_capture
+							.friends_cancel
+							.try_insert(pos, who.clone())
+							.map_err(|()| Error::<T>::MaxFriends)?,
+					}
+					<ActiveCaptures<T>>::insert(
+						&proposal.capture_owner,
+						&proposal.multisig_account,
+						&active_capture,
+					);
+
+					if capture_config.threshold as usize <= active_capture.friends_cancel.len() {
+						<ActiveCaptures<T>>::insert(
+							&proposal.capture_owner,
+							&proposal.multisig_account,
+							ActiveCapture {
+								capture_statue: CaptureStatue::Canceled,
+								..active_capture
+							},
+						);
+
+						Self::set_proposal_end(active_capture.execute_proposal_id)?;
+						Self::set_proposal_end(active_capture.cancel_proposal_id)?;
+					}
+				},
+			}
 
 			Ok(())
 		}
@@ -305,5 +360,17 @@ pub mod pallet {
 		}
 	}
 
-	impl<T: Config> Pallet<T> {}
+	impl<T: Config> Pallet<T> {
+		pub fn set_proposal_end(proposal_id: u64) -> DispatchResult {
+			let proposal = Self::proposals(&proposal_id).ok_or(Error::<T>::ProposalNotExist)?;
+			ensure!(proposal.statue != ProposalStatue::End, Error::<T>::ProposalNotEnd);
+
+			Proposals::<T>::insert(
+				proposal_id,
+				Proposal { statue: ProposalStatue::End, ..proposal },
+			);
+
+			Ok(())
+		}
+	}
 }
