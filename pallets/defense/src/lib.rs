@@ -14,9 +14,9 @@ mod benchmarking;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{traits::ConstU32, BoundedVec};
 use scale_info::TypeInfo;
+use sp_runtime::offchain::{http, Duration};
 use sp_runtime::RuntimeDebug;
 use sp_std::cmp::{Eq, PartialEq};
-use sp_std::vec;
 
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum TransferLimit<Balance> {
@@ -98,6 +98,10 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn block_time)]
 	pub type BlockTime<T> = StorageValue<_, bool>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn mail_status)]
+	pub type MailStatus<T> = StorageValue<_, bool>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -576,6 +580,16 @@ pub mod pallet {
 
 					T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
 					Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
+				} else {
+					for i in 0..risk_management_id {
+						if let Some((_, RiskManagement::Mail(_, _, _))) =
+							MapRiskManagement::<T>::get(&i)
+						{
+							log::info!("--------------------------------set mail status true");
+							MailStatus::<T>::put(true);
+							break;
+						}
+					}
 				}
 			}
 
@@ -587,25 +601,58 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
 			log::info!("Hi World from defense-pallet workers!: {:?}", block_number);
+			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 
-			let a_u8_const128: BoundedVec<u8, ConstU32<256>> = vec![1, 2, 3].try_into().unwrap();
-			let b_u8_const256: BoundedVec<u8, ConstU32<256>> = vec![4, 5, 6].try_into().unwrap();
-			let c_u8_const128: BoundedVec<u8, ConstU32<256>> = vec![7, 8, 9].try_into().unwrap();
-
-			let mail_content = RiskManagement::Mail(a_u8_const128, b_u8_const256, c_u8_const128);
-
-			// set a flag to indicate that should notify user with mail message
-			// check the flag in offchain worker
-			// send or not send email content by http post
-			// start local email server get post request
-
-			// email::notification(mail_content);
+			match MailStatus::<T>::get() {
+				Some(val) => {
+					if val == true {
+						for i in 0..risk_management_id {
+							if let Some((_, RiskManagement::Mail(receiver, title, message_body))) =
+								MapRiskManagement::<T>::get(&i)
+							{
+								log::info!("--------------------------------send email");
+								let mail_content =
+									RiskManagement::Mail(receiver, title, message_body);
+								break;
+							}
+						}
+					}
+				},
+				None => {
+					log::info!("--------------------------------get no email info");
+				},
+			}
 		}
 	}
 	impl<T: Config> Pallet<T> {
-		fn email_notification(mail: RiskManagement) -> Result<u64, http::Error> {
-			log::info!("--------------------------------maybe send email notification");
-			Ok(0)
+		fn send_email_info() -> Result<u64, http::Error> {
+			// prepare for send request
+			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(8_000));
+
+			// json
+
+			let form = "form";
+
+			let request = http::Request::post("http://127.0.0.1:3030/form", form);
+			let pending = request
+				.add_header("User-Agent", "Substrate-Offchain-Worker")
+				.deadline(deadline)
+				.send()
+				.map_err(|_| http::Error::IoError)?;
+			let response =
+				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+			if response.code != 200 {
+				log::warn!("Unexpected status code: {}", response.code);
+				return Err(http::Error::Unknown);
+			}
+			let body = response.body().collect::<Vec<u8>>();
+			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+				log::warn!("No UTF8 body");
+				http::Error::Unknown
+			})?;
+
+			let status_code = 200;
+			return Ok(status_code);
 		}
 	}
 }
