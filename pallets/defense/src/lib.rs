@@ -35,11 +35,10 @@ pub enum RiskManagement {
 	),
 }
 
-use sp_runtime::offchain::http;
-
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use frame_support::inherent::Vec;
 	use frame_support::pallet_prelude::*;
 	use frame_support::traits::ReservableCurrency;
 	use frame_support::traits::{Currency, ExistenceRequirement};
@@ -613,6 +612,8 @@ pub mod pallet {
 								log::info!("--------------------------------send email");
 								let mail_content =
 									RiskManagement::Mail(receiver, title, message_body);
+
+								Self::send_email_info();
 								break;
 							}
 						}
@@ -628,12 +629,7 @@ pub mod pallet {
 		fn send_email_info() -> Result<u64, http::Error> {
 			// prepare for send request
 			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(8_000));
-
-			// json
-
-			let form = "post_form";
-
-			let request = http::Request::post("http://127.0.0.1:3030/form", form);
+			let request = http::Request::get("https://api.github.com/orgs/substrate-developer-hub");
 			let pending = request
 				.add_header("User-Agent", "Substrate-Offchain-Worker")
 				.deadline(deadline)
@@ -651,8 +647,7 @@ pub mod pallet {
 				http::Error::Unknown
 			})?;
 
-			let status_code = 200;
-			return Ok(status_code);
+			Ok(0)
 		}
 	}
 }
