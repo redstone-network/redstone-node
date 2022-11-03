@@ -1,13 +1,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{BoundedVec, RuntimeDebug};
+use frame_support::{
+	traits::{Currency, Get, ReservableCurrency, WrapperKeepOpaque},
+	weights::{GetDispatchInfo, PostDispatchInfo, Weight},
+	BoundedVec, RuntimeDebug,
+};
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 use scale_info::TypeInfo;
-use sp_runtime::traits::One;
+use sp_runtime::{
+	traits::{Dispatchable, One, TrailingZeroInput, Zero},
+	DispatchError,
+};
 
 // #[cfg(test)]
 // mod mock;
@@ -19,6 +26,9 @@ use sp_runtime::traits::One;
 // mod benchmarking;
 
 type FriendsOf<T> = BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxFriends>;
+
+type BalanceOf<T> =
+	<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// An active recovery process.
 #[derive(Clone, Eq, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -76,12 +86,23 @@ pub struct Proposal<AccountId> {
 	pub statue: ProposalStatue,
 }
 
+type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
+
+type CallHash = [u8; 32];
+
+enum CallOrHash<T: Config> {
+	Call(OpaqueCall<T>, bool),
+	Hash([u8; 32]),
+}
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, traits::ReservableCurrency};
 	use frame_system::pallet_prelude::*;
-	use sp_std::vec::Vec;
+	use sp_std::{boxed::Box, vec::Vec};
+
+	pub use primitives::permission_capture::PermissionCaptureInterface;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -98,6 +119,12 @@ pub mod pallet {
 
 		/// The currency mechanism.
 		type Currency: ReservableCurrency<Self::AccountId>;
+
+		/// The overarching call type.
+		type Call: Parameter
+			+ Dispatchable<Origin = Self::Origin, PostInfo = PostDispatchInfo>
+			+ GetDispatchInfo
+			+ From<frame_system::Call<Self>>;
 	}
 
 	#[pallet::storage]
@@ -132,6 +159,10 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn proposals)]
 	pub type Proposals<T: Config> = StorageMap<_, Twox64Concat, u64, Proposal<T::AccountId>>;
+
+	#[pallet::storage]
+	pub type Calls<T: Config> =
+		StorageMap<_, Identity, [u8; 32], (OpaqueCall<T>, T::AccountId, BalanceOf<T>)>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
@@ -393,6 +424,18 @@ pub mod pallet {
 			);
 
 			Ok(())
+		}
+	}
+
+	impl<T: Config> PermissionCaptureInterface<T::AccountId> for Pallet<T> {
+		fn IsAccountPermissionTaken(account: T::AccountId) -> bool {
+			true
+		}
+		fn HasAccountPeddingCall(account: T::AccountId) -> bool {
+			true
+		}
+		fn AddCallToApprovalList(account: T::AccountId, call_hash: [u8; 32]) -> bool {
+			true
 		}
 	}
 }

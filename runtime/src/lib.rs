@@ -1262,6 +1262,7 @@ impl pallet_permission_capture::Config for Runtime {
 	type Event = Event;
 	type MaxFriends = MaxFriends;
 	type Currency = Balances;
+	type Call = Call;
 }
 
 parameter_types! {

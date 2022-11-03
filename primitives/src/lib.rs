@@ -25,6 +25,7 @@ pub mod currency;
 pub mod evm;
 pub mod nft;
 // pub mod signature;
+pub mod permission_capture;
 pub mod task;
 pub mod testing;
 pub mod transfer_protect;
@@ -140,9 +141,9 @@ pub struct TradingPair(CurrencyId, CurrencyId);
 
 impl TradingPair {
 	pub fn from_currency_ids(currency_id_a: CurrencyId, currency_id_b: CurrencyId) -> Option<Self> {
-		if currency_id_a.is_trading_pair_currency_id()
-			&& currency_id_b.is_trading_pair_currency_id()
-			&& currency_id_a != currency_id_b
+		if currency_id_a.is_trading_pair_currency_id() &&
+			currency_id_b.is_trading_pair_currency_id() &&
+			currency_id_a != currency_id_b
 		{
 			if currency_id_a > currency_id_b {
 				Some(TradingPair(currency_id_b, currency_id_a))
