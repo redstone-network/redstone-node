@@ -141,6 +141,10 @@ pub mod pallet {
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		SomethingStored(u32, T::AccountId),
+		NewCapture(),
+		CaptureOneFriendApproval(),
+		CaptureExecuted(),
+		CaptureCancelled(),
 	}
 
 	// Errors inform users that something went wrong.
@@ -322,6 +326,11 @@ pub mod pallet {
 
 						Self::set_proposal_end(active_capture.execute_proposal_id)?;
 						Self::set_proposal_end(active_capture.cancel_proposal_id)?;
+
+						// <ActiveCaptures<T>>::remove(
+						// 	&proposal.capture_owner,
+						// 	&proposal.multisig_account,
+						// );
 					}
 				},
 			}
