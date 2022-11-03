@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{traits::Currency, BoundedVec, RuntimeDebug};
+use frame_support::{BoundedVec, RuntimeDebug};
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
@@ -139,28 +139,23 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
-		NewCapture(),
-		CaptureOneFriendApproval(),
-		CaptureExecuted(),
-		CaptureCancelled(),
+		NewCapture(u64, T::AccountId, T::AccountId),
+		NewCancelCapture(u64, T::AccountId, T::AccountId),
+		ProposalOneFriendApproval(u64, T::AccountId, T::AccountId),
+		CaptureExecuted(T::AccountId),
+		CaptureCancelled(T::AccountId),
+		NewCaptureConfig(T::AccountId, Vec<T::AccountId>, u16),
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
-
 		NotCaptureable,
 		MaxFriends,
 		NotStarted,
 		AlreadyApproved,
 		ProposalNotExist,
-		ProposalNotEnd,
+		ProposalMustProcessing,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -209,6 +204,8 @@ pub mod pallet {
 			Proposals::<T>::insert(next_proposal_id, proposal);
 			NextProposalId::<T>::set(Some(next_proposal_id.saturating_add(One::one())));
 
+			Self::deposit_event(Event::NewCapture(next_proposal_id, account, who));
+
 			Ok(())
 		}
 
@@ -248,6 +245,8 @@ pub mod pallet {
 			Proposals::<T>::insert(next_proposal_id, proposal);
 			NextProposalId::<T>::set(Some(next_proposal_id.saturating_add(One::one())));
 
+			Self::deposit_event(Event::NewCancelCapture(next_proposal_id, account, who));
+
 			Ok(())
 		}
 
@@ -260,7 +259,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 
 			let proposal = Self::proposals(&proposal_id).ok_or(Error::<T>::ProposalNotExist)?;
-			ensure!(proposal.statue != ProposalStatue::End, Error::<T>::ProposalNotEnd);
+			ensure!(proposal.statue != ProposalStatue::End, Error::<T>::ProposalMustProcessing);
 
 			let capture_config =
 				Self::capture_config(&proposal.capture_owner).ok_or(Error::<T>::NotCaptureable)?;
@@ -298,6 +297,8 @@ pub mod pallet {
 						Self::set_proposal_end(active_capture.cancel_proposal_id)?;
 
 						<MapPermissionTaken<T>>::insert(&proposal.capture_owner, ());
+
+						Self::deposit_event(Event::CaptureExecuted(proposal.capture_owner.clone()));
 					}
 				},
 				ProposalType::Cancel => {
@@ -331,9 +332,19 @@ pub mod pallet {
 						// 	&proposal.capture_owner,
 						// 	&proposal.multisig_account,
 						// );
+
+						Self::deposit_event(Event::CaptureCancelled(
+							proposal.capture_owner.clone(),
+						));
 					}
 				},
 			}
+
+			Self::deposit_event(Event::ProposalOneFriendApproval(
+				proposal_id,
+				proposal.capture_owner,
+				who,
+			));
 
 			Ok(())
 		}
@@ -347,12 +358,14 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 
 			let bounded_friends: FriendsOf<T> =
-				friends.try_into().map_err(|()| Error::<T>::MaxFriends)?;
+				friends.clone().try_into().map_err(|()| Error::<T>::MaxFriends)?;
 
 			// Create the capture configuration
 			let capture_config = CaptureConfig { friends: bounded_friends, threshold };
 			// Create the capture configuration storage item
 			<Captureable<T>>::insert(&who, capture_config);
+
+			Self::deposit_event(Event::NewCaptureConfig(who, friends, threshold));
 
 			Ok(())
 		}
@@ -372,7 +385,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		pub fn set_proposal_end(proposal_id: u64) -> DispatchResult {
 			let proposal = Self::proposals(&proposal_id).ok_or(Error::<T>::ProposalNotExist)?;
-			ensure!(proposal.statue != ProposalStatue::End, Error::<T>::ProposalNotEnd);
+			ensure!(proposal.statue != ProposalStatue::End, Error::<T>::ProposalMustProcessing);
 
 			Proposals::<T>::insert(
 				proposal_id,
