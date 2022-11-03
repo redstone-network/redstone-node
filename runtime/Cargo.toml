@@ -113,6 +113,7 @@ orml-traits = { default-features = false, path = "../open-runtime-module-library
 
 # Local Dependencies
 pallet-difttt = { version = "4.0.0-dev", default-features = false, path = "../pallets/difttt" }
+pallet-defense = { version = "4.0.0-dev", default-features = false, path = "../pallets/defense" }
 pallet-dex = {version = "2.8.2", default-features = false, path = "../pallets/dex"}
 support = { package = "module-support", path = "../pallets/support", default-features = false }
 pallet-notification = { version = "0.0.1", default-features = false, path = "../pallets/notification" }

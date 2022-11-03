@@ -323,7 +323,7 @@ pub mod pallet {
 				},
 				_ => {},
 			}
-		
+
 			Self::deposit_event(Event::TrigerCreated(triger_id, triger));
 
 			Ok(())
