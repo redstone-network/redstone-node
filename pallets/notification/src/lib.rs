@@ -5,11 +5,11 @@
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 
-// #[cfg(test)]
-// mod mock;
+#[cfg(test)]
+mod mock;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
@@ -19,6 +19,7 @@ pub mod pallet {
 	use frame_support::{pallet_prelude::*, traits::ConstU32, BoundedVec};
 	use frame_system::pallet_prelude::*;
 	use pallet_difttt::Action;
+	pub use primitives::notification_info::NotificationInfoInterface;
 	use sp_std::vec::Vec;
 
 	#[pallet::pallet]
@@ -81,9 +82,15 @@ pub mod pallet {
 			let mut bound_title = BoundedVec::<u8, ConstU32<128>>::default();
 			let mut bound_body = BoundedVec::<u8, ConstU32<256>>::default();
 
-			receiver.iter().map(|x| bound_receiver.try_push(*x));
-			title.iter().map(|x| bound_title.try_push(*x));
-			body.iter().map(|x| bound_body.try_push(*x));
+			for x in receiver.iter() {
+				bound_receiver.try_push(*x);
+			}
+			for x in title.iter() {
+				bound_title.try_push(*x);
+			}
+			for x in body.iter() {
+				bound_body.try_push(*x);
+			}
 
 			let mail = Action::MailWithToken(
 				Default::default(),
@@ -113,6 +120,13 @@ pub mod pallet {
 			hook_url.iter().map(|x| bound_hook_url.try_push(*x));
 			message.iter().map(|x| bound_message.try_push(*x));
 
+			for x in hook_url.iter() {
+				bound_hook_url.try_push(*x);
+			}
+			for x in message.iter() {
+				bound_message.try_push(*x);
+			}
+
 			let slack = Action::Slack(bound_hook_url, bound_message);
 			MapNofityAction::<T>::insert(who.clone(), Self::value_in_actions(slack.clone()), slack);
 
@@ -134,9 +148,15 @@ pub mod pallet {
 			let mut bound_user = BoundedVec::<u8, ConstU32<64>>::default();
 			let mut bound_content = BoundedVec::<u8, ConstU32<256>>::default();
 
-			hook_url.iter().map(|x| bound_hook_url.try_push(*x));
-			user.iter().map(|x| bound_user.try_push(*x));
-			content.iter().map(|x| bound_content.try_push(*x));
+			for x in hook_url.iter() {
+				bound_hook_url.try_push(*x);
+			}
+			for x in user.iter() {
+				bound_user.try_push(*x);
+			}
+			for x in content.iter() {
+				bound_content.try_push(*x);
+			}
 
 			let discord = Action::Discord(bound_hook_url, bound_user, bound_content);
 			MapNofityAction::<T>::insert(
@@ -160,6 +180,18 @@ pub mod pallet {
 				Action::Slack(..) => 3,
 				Action::Discord(..) => 4,
 			}
+		}
+	}
+
+	impl<T: Config> NotificationInfoInterface<T::AccountId, Action<T::AccountId>> for Pallet<T> {
+		fn get_mail_config_action(account: T::AccountId) -> Option<Action<T::AccountId>> {
+			MapNofityAction::<T>::get(account, 0)
+		}
+		fn get_slack_config_action(account: T::AccountId) -> Option<Action<T::AccountId>> {
+			MapNofityAction::<T>::get(account, 3)
+		}
+		fn get_discord_config_action(account: T::AccountId) -> Option<Action<T::AccountId>> {
+			MapNofityAction::<T>::get(account, 4)
 		}
 	}
 }
