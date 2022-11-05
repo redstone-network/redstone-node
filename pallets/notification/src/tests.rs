@@ -36,6 +36,8 @@ fn test_set_mail_shold_work() {
 		);
 
 		assert_eq!(MapNofityAction::<Test>::get(0, 0), Some(mail));
+
+		println!("@@@@@ {:?}", NotificationModule::get_mail_config_action(0));
 	})
 }
 
@@ -55,8 +57,9 @@ fn test_set_slack_shold_work() {
 		}
 
 		let slack = Action::Slack(bound_hook_url, bound_message);
-
 		assert_eq!(MapNofityAction::<Test>::get(0, 3), Some(slack));
+
+		println!("@@@@@ {:?}", NotificationModule::get_slack_config_action(0));
 	})
 }
 
@@ -85,7 +88,8 @@ fn test_set_discord_shold_work() {
 		}
 
 		let mail = Action::Discord(bound_hook_url, bound_user, bound_content);
-
 		assert_eq!(MapNofityAction::<Test>::get(0, 4), Some(mail));
+
+		println!("@@@@@ {:?}", NotificationModule::get_discord_config_action(0));
 	})
 }
