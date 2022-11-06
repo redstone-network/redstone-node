@@ -25,6 +25,7 @@ pub mod currency;
 pub mod evm;
 pub mod nft;
 // pub mod signature;
+pub mod notification_info;
 pub mod permission_capture;
 pub mod task;
 pub mod testing;
