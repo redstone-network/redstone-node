@@ -10,13 +10,43 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{traits::ConstU32, BoundedVec};
 use scale_info::TypeInfo;
 use sp_runtime::offchain::{http, Duration};
 use sp_runtime::RuntimeDebug;
 use sp_std::cmp::{Eq, PartialEq};
+
+use frame_system::offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer};
+use sp_core::crypto::KeyTypeId;
+
+pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ocwd");
+pub mod crypto {
+	use super::KEY_TYPE;
+	use sp_core::sr25519::Signature as Sr25519Signature;
+	use sp_runtime::{
+		app_crypto::{app_crypto, sr25519},
+		traits::Verify,
+		MultiSignature, MultiSigner,
+	};
+	app_crypto!(sr25519, KEY_TYPE);
+
+	pub struct OcwAuthId;
+
+	impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for OcwAuthId {
+		type RuntimeAppPublic = Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
+	}
+
+	impl frame_system::offchain::AppCrypto<<Sr25519Signature as Verify>::Signer, Sr25519Signature>
+		for OcwAuthId
+	{
+		type RuntimeAppPublic = Public;
+		type GenericSignature = sp_core::sr25519::Signature;
+		type GenericPublic = sp_core::sr25519::Public;
+	}
+}
 
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum TransferLimit<Balance> {
@@ -38,7 +68,6 @@ pub enum RiskManagement {
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::inherent::Vec;
 	use frame_support::pallet_prelude::*;
 	use frame_support::traits::ReservableCurrency;
 	use frame_support::traits::{Currency, ExistenceRequirement};
@@ -47,15 +76,18 @@ pub mod pallet {
 	use sp_runtime::traits::SaturatedConversion;
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+	use data_encoding::BASE64;
+	use frame_support::inherent::Vec;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type Currency: ReservableCurrency<Self::AccountId>;
+		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 	}
 
 	/// store transfer limit
@@ -437,6 +469,7 @@ pub mod pallet {
 				log::info!("--------------------------------not set any transfer limit");
 				T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
 				Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
+				log::info!("-------------------------------transfer successfully");
 			} else {
 				let mut satisfy_times_limit = false;
 				let mut satisfy_amount_limit = false;
@@ -454,16 +487,15 @@ pub mod pallet {
 											MapRiskManagement::<T>::get(&i)
 										{
 											if freeze == true {
+												BlockAccount::<T>::put(true);
+												set_freeze_account = true;
 												log::info!(
 													"--------------------------------freeze account forever"
 												);
-												BlockAccount::<T>::put(true);
-												set_freeze_account = true;
 												break;
 											}
 										}
 									}
-
 									if set_freeze_account == false {
 										for i in 0..risk_management_id {
 											if let Some((
@@ -471,15 +503,44 @@ pub mod pallet {
 												RiskManagement::TimeFreeze(_, _freeze_time),
 											)) = MapRiskManagement::<T>::get(&i)
 											{
-												log::info!(
-													"--------------------------------freeze account for some time "
-												);
 												BlockTime::<T>::put(true);
+												for i in 0..risk_management_id {
+													if let Some((
+														_,
+														RiskManagement::Mail(_, _, _),
+													)) = MapRiskManagement::<T>::get(&i)
+													{
+														log::info!("--------------------------------set mail status true");
+														MailStatus::<T>::put(true);
+														break;
+													}
+												}
+												log::info!(
+													"--------------------------------freeze account temporary "
+												);
 												break;
 											}
 										}
 									}
-
+									for i in 0..risk_management_id {
+										if let Some((_, RiskManagement::Mail(_, _, _))) =
+											MapRiskManagement::<T>::get(&i)
+										{
+											match MailStatus::<T>::get() {
+												Some(val) => {
+													if val != true {
+														log::info!("-------------------------------- mail status true is false,set mail status true");
+														MailStatus::<T>::put(true);
+													}
+												},
+												None => {
+													log::info!("-------------------------------- mail status true is none,set mail status true");
+													MailStatus::<T>::put(true);
+												},
+											}
+											break;
+										}
+									}
 									ensure!(times > 0, Error::<T>::TransferTimesTooMany);
 								} else {
 									satisfy_times_limit = true;
@@ -495,13 +556,35 @@ pub mod pallet {
 										MapRiskManagement::<T>::get(&i)
 									{
 										if freeze == true {
+											BlockAccount::<T>::put(true);
+											set_freeze_account = true;
+
 											log::info!(
 												"--------------------------------freeze account forever"
 											);
-											BlockAccount::<T>::put(true);
-											set_freeze_account = true;
 											break;
 										}
+									}
+								}
+
+								for i in 0..risk_management_id {
+									if let Some((_, RiskManagement::Mail(_, _, _))) =
+										MapRiskManagement::<T>::get(&i)
+									{
+										match MailStatus::<T>::get() {
+											Some(val) => {
+												if val != true {
+													log::info!("--------------------------------mail status true is false,set mail status true");
+
+													MailStatus::<T>::put(true);
+												}
+											},
+											None => {
+												log::info!("-------------------------------- mail status true is none,set mail status true");
+												MailStatus::<T>::put(true);
+											},
+										}
+										break;
 									}
 								}
 
@@ -512,15 +595,15 @@ pub mod pallet {
 											RiskManagement::TimeFreeze(_, _freeze_time),
 										)) = MapRiskManagement::<T>::get(&i)
 										{
-											log::info!(
-												"--------------------------------freeze account for some time "
-											);
 											BlockTime::<T>::put(true);
+
+											log::info!(
+												"--------------------------------freeze account temporary "
+											);
 											break;
 										}
 									}
 								}
-
 								ensure!(amount > value, Error::<T>::TransferValueTooLarge);
 							}
 							satisfy_amount_limit = true;
@@ -532,16 +615,18 @@ pub mod pallet {
 						},
 					}
 				}
-				if satisfy_amount_limit == true && satisfy_times_limit == true {
+				if satisfy_amount_limit == true || satisfy_times_limit == true {
 					match BlockAccount::<T>::get() {
 						Some(val) => {
+							log::info!(
+								"-------------------------------- account has been freezed forever"
+							);
 							ensure!(!val, Error::<T>::AccountHasBeenFrozenForever);
 						},
 						None => {
-							log::info!("--------------------------------health account")
+							log::info!("--------------------------------health account");
 						},
 					}
-
 					match BlockTime::<T>::get() {
 						Some(val) => {
 							if val == true {
@@ -557,8 +642,18 @@ pub mod pallet {
 											>= block_number.saturated_into::<u64>()
 										{
 											BlockAccount::<T>::put(false);
+
+											if let Some(val) = MailStatus::<T>::get() {
+												if val == true {
+													MailStatus::<T>::put(false);
+													log::info!(
+														"-------------------------------- reactivate email notification"
+													);
+												}
+											}
+
 											log::info!(
-												"--------------------------------unfreeze amount"
+												"--------------------------------unfreeze account"
 											)
 										} else {
 											ensure!(
@@ -579,20 +674,29 @@ pub mod pallet {
 
 					T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
 					Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
+					log::info!("-------------------------------transfer successfully");
 				} else {
-					for i in 0..risk_management_id {
-						if let Some((_, RiskManagement::Mail(_, _, _))) =
-							MapRiskManagement::<T>::get(&i)
-						{
-							log::info!("--------------------------------set mail status true");
-							MailStatus::<T>::put(true);
-							break;
-						}
-					}
+					log::info!(
+						"-------------------------------condition not satisfy,transfer failed!!!"
+					);
 				}
 			}
 
 			Ok(())
+		}
+
+		#[pallet::weight(0)]
+		pub fn reset_email_status(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			let _who = ensure_signed(origin)?;
+
+			if let Some(val) = MailStatus::<T>::get() {
+				if val == true {
+					MailStatus::<T>::put(false);
+					log::info!("-------------------------------- reactivate email notification");
+				}
+			}
+
+			Ok(().into())
 		}
 	}
 
@@ -602,6 +706,7 @@ pub mod pallet {
 			log::info!("Hi World from defense-pallet workers!: {:?}", block_number);
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 
+			// 检查是否需要发送邮件
 			match MailStatus::<T>::get() {
 				Some(val) => {
 					if val == true {
@@ -610,36 +715,98 @@ pub mod pallet {
 								MapRiskManagement::<T>::get(&i)
 							{
 								log::info!("--------------------------------send email");
-								let mail_content =
-									RiskManagement::Mail(receiver, title, message_body);
 
-								Self::send_email_info();
-								break;
+								let to_email = match scale_info::prelude::string::String::from_utf8(
+									receiver.to_vec(),
+								) {
+									Ok(v) => v,
+									Err(e) => {
+										log::info!("------decode receiver error  {:?}", e);
+										continue;
+									},
+								};
+
+								let subject = match scale_info::prelude::string::String::from_utf8(
+									title.to_vec(),
+								) {
+									Ok(v) => v,
+									Err(e) => {
+										log::info!("------decode subject error  {:?}", e);
+										continue;
+									},
+								};
+
+								let content = match scale_info::prelude::string::String::from_utf8(
+									message_body.to_vec(),
+								) {
+									Ok(v) => v,
+									Err(e) => {
+										log::info!("------decode content error  {:?}", e);
+										continue;
+									},
+								};
+
+								let basic_url = "http://127.0.0.1:3030/get?";
+
+								let email = BASE64.encode(to_email[..].as_bytes());
+								let subject = BASE64.encode(subject[..].as_bytes());
+								let content = BASE64.encode(content[..].as_bytes());
+
+								let url = &scale_info::prelude::format!(
+									"{}email={}&subject={}&content={}",
+									basic_url,
+									email,
+									subject,
+									content
+								)[..];
+
+								match Self::send_email_info(url) {
+									Ok(val) => {
+										log::info!("email send successfully {:?}", val);
+										match Self::send_signed_tx() {
+											Ok(_) => log::info!("reset email status as false"),
+											Err(e) => {
+												log::info!(
+													"reset email status as false failed {:?}",
+													e
+												);
+											},
+										};
+									},
+									Err(e) => log::info!("email send failed {:?}", e),
+								};
 							}
 						}
+					} else {
+						// log::info!("--------------------------------no need to send email");
 					}
 				},
 				None => {
-					log::info!("--------------------------------get no email info");
+					// log::info!("--------------------------------no find email info");
 				},
 			}
 		}
 	}
 	impl<T: Config> Pallet<T> {
-		fn send_email_info() -> Result<u64, http::Error> {
+		fn send_email_info(url: &str) -> Result<u64, http::Error> {
 			// prepare for send request
-			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(8_000));
-			let request = http::Request::get("https://api.github.com/orgs/substrate-developer-hub");
-			let pending = request
-				.add_header("User-Agent", "Substrate-Offchain-Worker")
-				.deadline(deadline)
-				.send()
-				.map_err(|_| http::Error::IoError)?;
+			// log::info!("--------------request url {:?}", url);
+			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+			let request = http::Request::get(url);
+
+			let pending = request.deadline(deadline).send().map_err(|e| {
+				log::info!("---------get pending error: {:?}", e);
+				http::Error::IoError
+			})?;
+
 			let response =
 				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 			if response.code != 200 {
 				log::warn!("Unexpected status code: {}", response.code);
 				return Err(http::Error::Unknown);
+			} else {
+				log::info!("email send successfully")
 			}
 			let body = response.body().collect::<Vec<u8>>();
 			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
@@ -647,7 +814,30 @@ pub mod pallet {
 				http::Error::Unknown
 			})?;
 
+			log::info!("get return value: {}", body_str);
+
 			Ok(0)
+		}
+		fn send_signed_tx() -> Result<(), &'static str> {
+			let signer = Signer::<T, T::AuthorityId>::all_accounts();
+			if !signer.can_sign() {
+				return Err(
+					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
+				);
+			}
+
+			let results = signer.send_signed_transaction(|_account| Call::reset_email_status {});
+
+			log::info!("-------- results");
+
+			for (acc, res) in &results {
+				match res {
+					Ok(()) => log::info!("[{:?}] Submitted change info", acc.id),
+					Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+				}
+			}
+
+			Ok(())
 		}
 	}
 }
