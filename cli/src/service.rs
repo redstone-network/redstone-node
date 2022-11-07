@@ -373,6 +373,13 @@ pub fn new_full_base(
 		)
 		.expect("Creating key with account Alice should succeed.");
 
+		sp_keystore::SyncCryptoStore::sr25519_generate_new(
+			&*keystore,
+			node_runtime::pallet_defense::KEY_TYPE,
+			Some("//Alice"), //添加的是Alice账户，测试用的，本身有很多余额，也是Sudo
+		)
+		.expect("Creating key with account Alice should succeed.");
+
 		sc_service::build_offchain_workers(
 			&config,
 			task_manager.spawn_handle(),

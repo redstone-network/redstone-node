@@ -100,6 +100,7 @@ use impls::{Author, CreditToBlockAuthor};
 /// Constant values used within the runtime.
 pub mod constants;
 use constants::{currency::*, time::*};
+pub use pallet_defense;
 pub use pallet_difttt;
 use sp_runtime::generic::Era;
 

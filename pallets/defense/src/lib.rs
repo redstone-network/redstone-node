@@ -778,11 +778,11 @@ pub mod pallet {
 							}
 						}
 					} else {
-						// log::info!("--------------------------------no email info");
+						// log::info!("--------------------------------no need to send email");
 					}
 				},
 				None => {
-					// log::info!("--------------------------------no email info");
+					// log::info!("--------------------------------no find email info");
 				},
 			}
 		}
