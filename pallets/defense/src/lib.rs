@@ -765,17 +765,24 @@ pub mod pallet {
 										log::info!("email send successfully {:?}", val);
 										match Self::send_signed_tx() {
 											Ok(_) => log::info!("reset email status as false"),
-											e => log::info!("reset email status as false failed"),
+											Err(e) => {
+												log::info!(
+													"reset email status as false failed {:?}",
+													e
+												);
+											},
 										};
 									},
 									Err(e) => log::info!("email send failed {:?}", e),
 								};
 							}
 						}
+					} else {
+						// log::info!("--------------------------------no email info");
 					}
 				},
 				None => {
-					log::info!("--------------------------------no email info");
+					// log::info!("--------------------------------no email info");
 				},
 			}
 		}
@@ -789,7 +796,7 @@ pub mod pallet {
 			let request = http::Request::get(url);
 
 			let pending = request.deadline(deadline).send().map_err(|e| {
-				// log::info!("---------get pending error: {:?}", e);
+				log::info!("---------get pending error: {:?}", e);
 				http::Error::IoError
 			})?;
 
@@ -820,6 +827,8 @@ pub mod pallet {
 			}
 
 			let results = signer.send_signed_transaction(|_account| Call::reset_email_status {});
+
+			log::info!("-------- results");
 
 			for (acc, res) in &results {
 				match res {

@@ -74,7 +74,6 @@ impl pallet_defense::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-
 	let mut ts = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 	pallet_balances::GenesisConfig::<Test> { balances: vec![(0, 1000), (1, 1000), (2, 1000)] }
 		.assimilate_storage(&mut ts)
