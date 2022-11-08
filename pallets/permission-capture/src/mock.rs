@@ -1,5 +1,8 @@
-use crate as pallet_notification;
-use frame_support::traits::{ConstU16, ConstU64};
+use crate as pallet_permission_capture;
+use frame_support::{
+	parameter_types,
+	traits::{ConstU16, ConstU64},
+};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -18,7 +21,8 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system,
-		TemplateModule: pallet_template,
+		Balances: pallet_balances,
+		PermissionCaptureModule: pallet_permission_capture,
 	}
 );
 
@@ -40,7 +44,7 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -49,8 +53,31 @@ impl system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl pallet_notification::Config for Test {
+parameter_types! {
+	pub const ExistentialDeposit: u64 = 1;
+}
+
+impl pallet_balances::Config for Test {
+	type MaxLocks = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	type Balance = u128;
+	type DustRemoval = ();
 	type Event = Event;
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = System;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub const MaxFriends: u32 = 128;
+}
+
+impl pallet_permission_capture::Config for Test {
+	type Event = Event;
+	type MaxFriends = MaxFriends;
+	type Currency = Balances;
+	type Call = Call;
 }
 
 // Build genesis storage according to the mock runtime.
