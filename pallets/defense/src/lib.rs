@@ -16,6 +16,7 @@ use scale_info::TypeInfo;
 use sp_runtime::offchain::{http, Duration};
 use sp_runtime::RuntimeDebug;
 use sp_std::cmp::{Eq, PartialEq};
+use pallet_difttt::Action;
 
 use frame_system::offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer};
 use sp_core::crypto::KeyTypeId;
@@ -78,6 +79,7 @@ pub mod pallet {
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 	use data_encoding::BASE64;
 	use frame_support::inherent::Vec;
+	use pallet_notification::NotificationInfoInterface;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -88,6 +90,7 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type Currency: ReservableCurrency<Self::AccountId>;
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+		type Notification: NotificationInfoInterface<Self::AccountId, Action<Self::AccountId>>;
 	}
 
 	/// store transfer limit
@@ -133,6 +136,14 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn mail_status)]
 	pub type MailStatus<T> = StorageValue<_, bool>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn slack_status)]
+	pub type SlackStatus<T> = StorageValue<_, bool>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn discord_status)]
+	pub type DiscordStatus<T> = StorageValue<_, bool>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -686,13 +697,26 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(0)]
-		pub fn reset_email_status(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+		pub fn reset_notification_status(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let _who = ensure_signed(origin)?;
 
 			if let Some(val) = MailStatus::<T>::get() {
 				if val == true {
 					MailStatus::<T>::put(false);
-					log::info!("-------------------------------- reactivate email notification");
+					log::info!("-------------------------------- deactivate email notification");
+				}
+			}
+			if let Some(val) = MailStatus::<T>::get() {
+				if val == true {
+					DiscordStatus::<T>::put(false);
+					log::info!("-------------------------------- deactivate discord notification");
+				}
+			}
+
+			if let Some(val) = MailStatus::<T>::get() {
+				if val == true {
+					SlackStatus::<T>::put(false);
+					log::info!("-------------------------------- deactivate slack notification");
 				}
 			}
 
@@ -764,10 +788,10 @@ pub mod pallet {
 									Ok(val) => {
 										log::info!("email send successfully {:?}", val);
 										match Self::send_signed_tx() {
-											Ok(_) => log::info!("reset email status as false"),
+											Ok(_) => log::info!("reset notification status as false"),
 											Err(e) => {
 												log::info!(
-													"reset email status as false failed {:?}",
+													"reset notification status as false failed {:?}",
 													e
 												);
 											},
@@ -826,7 +850,7 @@ pub mod pallet {
 				);
 			}
 
-			let results = signer.send_signed_transaction(|_account| Call::reset_email_status {});
+			let results = signer.send_signed_transaction(|_account| Call::reset_notification_status {});
 
 			log::info!("-------- results");
 

@@ -5094,6 +5094,8 @@ dependencies = [
  "orml-utilities",
  "pallet-balances",
  "pallet-dex",
+ "pallet-difttt",
+ "pallet-notification",
  "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
@@ -5435,6 +5437,7 @@ dependencies = [
 name = "pallet-notification"
 version = "0.0.1"
 dependencies = [
+ "acala-primitives",
  "frame-support",
  "frame-system",
  "pallet-balances",

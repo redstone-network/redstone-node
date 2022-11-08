@@ -1189,6 +1189,7 @@ impl pallet_defense::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
 	type AuthorityId = pallet_defense::crypto::OcwAuthId;
+	type Notification = Notification;
 }
 
 parameter_types! {
