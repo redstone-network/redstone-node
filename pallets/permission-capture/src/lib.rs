@@ -16,11 +16,11 @@ use sp_runtime::{
 	DispatchError,
 };
 
-// #[cfg(test)]
-// mod mock;
+#[cfg(test)]
+mod mock;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
@@ -40,7 +40,7 @@ pub struct ActiveCapture<BlockNumber, Friends, CaptureStatue> {
 	friends_cancel: Friends,
 
 	execute_proposal_id: u64,
-	cancel_proposal_id: u64,
+	cancel_proposal_id: Option<u64>,
 
 	capture_statue: CaptureStatue,
 }
@@ -78,7 +78,6 @@ pub struct Proposal<AccountId> {
 	pub proposal_type: ProposalType,
 	pub proposer: AccountId,
 	pub capture_owner: AccountId,
-	pub multisig_account: AccountId,
 
 	pub approve_votes: u128,
 	pub deny_votes: u128,
@@ -106,6 +105,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -143,10 +143,8 @@ pub mod pallet {
 	/// is the user trying to recover the account.
 	#[pallet::storage]
 	#[pallet::getter(fn active_capture)]
-	pub type ActiveCaptures<T: Config> = StorageDoubleMap<
+	pub type ActiveCaptures<T: Config> = StorageMap<
 		_,
-		Twox64Concat,
-		T::AccountId,
 		Twox64Concat,
 		T::AccountId,
 		ActiveCapture<T::BlockNumber, FriendsOf<T>, CaptureStatue>,
@@ -163,6 +161,8 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type Calls<T: Config> =
 		StorageMap<_, Identity, [u8; 32], (OpaqueCall<T>, T::AccountId, BalanceOf<T>)>;
+	#[pallet::storage]
+	pub type OwnerCalls<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, [u8; 32]>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
@@ -187,6 +187,9 @@ pub mod pallet {
 		AlreadyApproved,
 		ProposalNotExist,
 		ProposalMustProcessing,
+		MustProposalByFriends,
+		ProposalAlreadyCreated,
+		MustVoteByFriends,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -203,8 +206,14 @@ pub mod pallet {
 			account: T::AccountId, //capture owner
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let multisig_account = account.clone(); // todo create a multisig account(all friends is one of the multisig member) for current
-										// accout.
+
+			let capture_config =
+				Self::capture_config(&account).ok_or(Error::<T>::NotCaptureable)?;
+			ensure!(capture_config.friends.contains(&who), Error::<T>::MustProposalByFriends);
+			ensure!(
+				!<ActiveCaptures<T>>::contains_key(&account),
+				Error::<T>::ProposalAlreadyCreated
+			);
 
 			let next_proposal_id = NextProposalId::<T>::get().unwrap_or_default();
 
@@ -218,13 +227,12 @@ pub mod pallet {
 				capture_statue: CaptureStatue::Processing,
 			};
 
-			<ActiveCaptures<T>>::insert(&account, &multisig_account, active_capture);
+			<ActiveCaptures<T>>::insert(&account, active_capture);
 
 			let proposal = Proposal {
 				proposal_type: ProposalType::ExecuteCapture,
 				proposer: who.clone(),
 				capture_owner: account.clone(),
-				multisig_account: multisig_account.clone(),
 
 				approve_votes: Default::default(),
 				deny_votes: Default::default(),
@@ -248,24 +256,23 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			let multisig_account = account.clone();
 
-			let _capture_config =
+			let capture_config =
 				Self::capture_config(&account).ok_or(Error::<T>::NotCaptureable)?;
-			let active_capture =
-				Self::active_capture(&account, &multisig_account).ok_or(Error::<T>::NotStarted)?;
+
+			let active_capture = Self::active_capture(&account).ok_or(Error::<T>::NotStarted)?;
+			ensure!(capture_config.friends.contains(&who), Error::<T>::MustProposalByFriends);
 
 			let next_proposal_id = NextProposalId::<T>::get().unwrap_or_default();
 
 			<ActiveCaptures<T>>::insert(
 				&account,
-				&multisig_account,
-				ActiveCapture { cancel_proposal_id: next_proposal_id, ..active_capture },
+				ActiveCapture { cancel_proposal_id: Some(next_proposal_id), ..active_capture },
 			);
 
 			let proposal = Proposal {
 				proposal_type: ProposalType::Cancel,
 				proposer: who.clone(),
 				capture_owner: account.clone(),
-				multisig_account: multisig_account.clone(),
 
 				approve_votes: Default::default(),
 				deny_votes: Default::default(),
@@ -294,10 +301,10 @@ pub mod pallet {
 
 			let capture_config =
 				Self::capture_config(&proposal.capture_owner).ok_or(Error::<T>::NotCaptureable)?;
+			ensure!(capture_config.friends.contains(&who), Error::<T>::MustVoteByFriends);
 
 			let mut active_capture =
-				Self::active_capture(&proposal.capture_owner, &proposal.multisig_account)
-					.ok_or(Error::<T>::NotStarted)?;
+				Self::active_capture(&proposal.capture_owner).ok_or(Error::<T>::NotStarted)?;
 
 			match proposal.proposal_type.clone() {
 				ProposalType::ExecuteCapture => {
@@ -308,16 +315,15 @@ pub mod pallet {
 							.try_insert(pos, who.clone())
 							.map_err(|()| Error::<T>::MaxFriends)?,
 					}
-					<ActiveCaptures<T>>::insert(
-						&proposal.capture_owner,
-						&proposal.multisig_account,
-						&active_capture,
+					<ActiveCaptures<T>>::insert(&proposal.capture_owner, &active_capture);
+					<Proposals<T>>::insert(
+						&proposal_id,
+						Proposal { approve_votes: &proposal.approve_votes + 1, ..proposal.clone() },
 					);
 
 					if capture_config.threshold as usize <= active_capture.friends_approve.len() {
 						<ActiveCaptures<T>>::insert(
 							&proposal.capture_owner,
-							&proposal.multisig_account,
 							ActiveCapture {
 								capture_statue: CaptureStatue::PermissionTaken,
 								..active_capture
@@ -325,7 +331,11 @@ pub mod pallet {
 						);
 
 						Self::set_proposal_end(active_capture.execute_proposal_id)?;
-						Self::set_proposal_end(active_capture.cancel_proposal_id)?;
+						if active_capture.cancel_proposal_id.is_some() {
+							Self::set_proposal_end(
+								active_capture.cancel_proposal_id.unwrap_or_default(),
+							)?;
+						}
 
 						<MapPermissionTaken<T>>::insert(&proposal.capture_owner, ());
 
@@ -340,16 +350,15 @@ pub mod pallet {
 							.try_insert(pos, who.clone())
 							.map_err(|()| Error::<T>::MaxFriends)?,
 					}
-					<ActiveCaptures<T>>::insert(
-						&proposal.capture_owner,
-						&proposal.multisig_account,
-						&active_capture,
+					<ActiveCaptures<T>>::insert(&proposal.capture_owner, &active_capture);
+					<Proposals<T>>::insert(
+						&proposal_id,
+						Proposal { approve_votes: &proposal.approve_votes + 1, ..proposal.clone() },
 					);
 
 					if capture_config.threshold as usize <= active_capture.friends_cancel.len() {
 						<ActiveCaptures<T>>::insert(
 							&proposal.capture_owner,
-							&proposal.multisig_account,
 							ActiveCapture {
 								capture_statue: CaptureStatue::Canceled,
 								..active_capture
@@ -357,12 +366,11 @@ pub mod pallet {
 						);
 
 						Self::set_proposal_end(active_capture.execute_proposal_id)?;
-						Self::set_proposal_end(active_capture.cancel_proposal_id)?;
-
-						// <ActiveCaptures<T>>::remove(
-						// 	&proposal.capture_owner,
-						// 	&proposal.multisig_account,
-						// );
+						if active_capture.cancel_proposal_id.is_some() {
+							Self::set_proposal_end(
+								active_capture.cancel_proposal_id.unwrap_or_default(),
+							)?;
+						}
 
 						Self::deposit_event(Event::CaptureCancelled(
 							proposal.capture_owner.clone(),
@@ -427,15 +435,25 @@ pub mod pallet {
 		}
 	}
 
-	impl<T: Config> PermissionCaptureInterface<T::AccountId> for Pallet<T> {
-		fn IsAccountPermissionTaken(account: T::AccountId) -> bool {
-			true
+	impl<T: Config> PermissionCaptureInterface<T::AccountId, OpaqueCall<T>, BalanceOf<T>>
+		for Pallet<T>
+	{
+		fn is_account_permission_taken(account: T::AccountId) -> bool {
+			<MapPermissionTaken<T>>::contains_key(account)
 		}
-		fn HasAccountPeddingCall(account: T::AccountId) -> bool {
-			true
+		fn has_account_pedding_call(account: T::AccountId) -> bool {
+			<OwnerCalls<T>>::contains_key(account)
 		}
-		fn AddCallToApprovalList(account: T::AccountId, call_hash: [u8; 32]) -> bool {
-			true
+		fn add_call_to_approval_list(
+			account: T::AccountId,
+			call_hash: [u8; 32],
+			data: OpaqueCall<T>,
+			other_deposit: BalanceOf<T>,
+		) -> bool {
+			<OwnerCalls<T>>::insert(&account, &call_hash);
+			Calls::<T>::insert(&call_hash, (data, account, other_deposit));
+
+			return true
 		}
 	}
 }
