@@ -12,11 +12,11 @@ mod tests;
 mod benchmarking;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{traits::ConstU32, BoundedVec};
+use pallet_difttt::Action;
 use scale_info::TypeInfo;
 use sp_runtime::offchain::{http, Duration};
 use sp_runtime::RuntimeDebug;
 use sp_std::cmp::{Eq, PartialEq};
-use pallet_difttt::Action;
 
 use frame_system::offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer};
 use sp_core::crypto::KeyTypeId;
@@ -552,6 +552,27 @@ pub mod pallet {
 											break;
 										}
 									}
+									match T::Notification::get_mail_config_action(who.clone()) {
+										Some(_) => {
+											log::info!("-------------------------------- mail with token status is none,set mail status true");
+											MailStatus::<T>::put(true);
+										},
+										_ => {},
+									}
+									match T::Notification::get_slack_config_action(who.clone()) {
+										Some(_) => {
+											log::info!("-------------------------------- slack status is none,set mail status true");
+											SlackStatus::<T>::put(true);
+										},
+										_ => {},
+									}
+									match T::Notification::get_discord_config_action(who.clone()) {
+										Some(_) => {
+											log::info!("-------------------------------- discord with token status is none,set mail status true");
+											DiscordStatus::<T>::put(true);
+										},
+										_ => {},
+									}
 									ensure!(times > 0, Error::<T>::TransferTimesTooMany);
 								} else {
 									satisfy_times_limit = true;
@@ -597,6 +618,28 @@ pub mod pallet {
 										}
 										break;
 									}
+								}
+
+								match T::Notification::get_mail_config_action(who.clone()) {
+									Some(_) => {
+										log::info!("-------------------------------- mail with token status is none,set mail status true");
+										MailStatus::<T>::put(true);
+									},
+									_ => {},
+								}
+								match T::Notification::get_slack_config_action(who.clone()) {
+									Some(_) => {
+										log::info!("-------------------------------- slack status is none,set mail status true");
+										SlackStatus::<T>::put(true);
+									},
+									_ => {},
+								}
+								match T::Notification::get_discord_config_action(who.clone()) {
+									Some(_) => {
+										log::info!("-------------------------------- discord with token status is none,set mail status true");
+										DiscordStatus::<T>::put(true);
+									},
+									_ => {},
 								}
 
 								if set_freeze_account == false {
@@ -788,7 +831,9 @@ pub mod pallet {
 									Ok(val) => {
 										log::info!("email send successfully {:?}", val);
 										match Self::send_signed_tx() {
-											Ok(_) => log::info!("reset notification status as false"),
+											Ok(_) => {
+												log::info!("reset notification status as false")
+											},
 											Err(e) => {
 												log::info!(
 													"reset notification status as false failed {:?}",
@@ -809,12 +854,107 @@ pub mod pallet {
 					// log::info!("--------------------------------no find email info");
 				},
 			}
+
+			match SlackStatus::<T>::get() {
+				Some(val) => {
+					if val == true {
+						Self::send_slack_info();
+					}
+				},
+				None => {},
+			}
+			match DiscordStatus::<T>::get() {
+				Some(val) => {
+					if val == true {
+						Self::send_discord_info();
+					}
+				},
+				None => {},
+			}
 		}
 	}
 	impl<T: Config> Pallet<T> {
 		fn send_email_info(url: &str) -> Result<u64, http::Error> {
 			// prepare for send request
 			// log::info!("--------------request url {:?}", url);
+			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+			let request = http::Request::get(url);
+
+			let pending = request.deadline(deadline).send().map_err(|e| {
+				log::info!("---------get pending error: {:?}", e);
+				http::Error::IoError
+			})?;
+
+			let response =
+				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+			if response.code != 200 {
+				log::warn!("Unexpected status code: {}", response.code);
+				return Err(http::Error::Unknown);
+			} else {
+				log::info!("email send successfully")
+			}
+			let body = response.body().collect::<Vec<u8>>();
+			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+				log::warn!("No UTF8 body");
+				http::Error::Unknown
+			})?;
+
+			log::info!("get return value: {}", body_str);
+
+			Ok(0)
+		}
+		fn send_discord_info() -> Result<u64, http::Error> {
+			// prepare for send request
+			// log::info!("--------------request url {:?}", url);
+
+			// match T::Notification::get_discord_config_action(who) {
+			// 	Some(Action::Discord(discord_hook_url, user_name, content)) => {
+			// 		log::info!("-------------------------------- discord with token status is none,set mail status true");
+
+			// 		Self::send_discord_info();
+			// 	},
+			// 	_ => {},
+			// }
+
+			let url = "https://discord.com";
+			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+			let request = http::Request::get(url);
+
+			let pending = request.deadline(deadline).send().map_err(|e| {
+				log::info!("---------get pending error: {:?}", e);
+				http::Error::IoError
+			})?;
+
+			let response =
+				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+			if response.code != 200 {
+				log::warn!("Unexpected status code: {}", response.code);
+				return Err(http::Error::Unknown);
+			} else {
+				log::info!("email send successfully")
+			}
+			let body = response.body().collect::<Vec<u8>>();
+			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+				log::warn!("No UTF8 body");
+				http::Error::Unknown
+			})?;
+
+			log::info!("get return value: {}", body_str);
+
+			Ok(0)
+		}
+		fn send_slack_info() -> Result<u64, http::Error> {
+			// match T::Notification::get_slack_config_action(who) {
+			// 	Some(Action::Slack(slack_hook_url, message)) => {
+			// 		log::info!("-------------------------------- slack status is none,set mail status true");
+			// 	},
+			// 	_ => {},
+			// }
+			// prepare for send request
+			// log::info!("--------------request url {:?}", url);
+			let url = "https://slack.com";
 			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
 
 			let request = http::Request::get(url);
@@ -850,7 +990,8 @@ pub mod pallet {
 				);
 			}
 
-			let results = signer.send_signed_transaction(|_account| Call::reset_notification_status {});
+			let results =
+				signer.send_signed_transaction(|_account| Call::reset_notification_status {});
 
 			log::info!("-------- results");
 
