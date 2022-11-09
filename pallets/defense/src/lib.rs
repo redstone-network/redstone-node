@@ -11,14 +11,30 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{traits::ConstU32, BoundedVec};
+use frame_support::{
+	traits::{ConstU32, WrapperKeepOpaque},
+	weights::{GetDispatchInfo, PostDispatchInfo, Weight},
+	BoundedVec,
+};
 use scale_info::TypeInfo;
-use sp_runtime::offchain::{http, Duration};
-use sp_runtime::RuntimeDebug;
+use sp_runtime::{
+	offchain::{http, Duration},
+	traits::Dispatchable,
+	RuntimeDebug,
+};
 use sp_std::cmp::{Eq, PartialEq};
 
 use frame_system::offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer};
 use sp_core::crypto::KeyTypeId;
+
+type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
+
+type CallHash = [u8; 32];
+
+enum CallOrHash<T: Config> {
+	Call(OpaqueCall<T>, bool),
+	Hash([u8; 32]),
+}
 
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ocwd");
 pub mod crypto {
@@ -68,19 +84,22 @@ pub enum RiskManagement {
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
-	use frame_support::traits::ReservableCurrency;
-	use frame_support::traits::{Currency, ExistenceRequirement};
+	use frame_support::{
+		pallet_prelude::*,
+		traits::{Currency, ExistenceRequirement, ReservableCurrency},
+	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::One;
-	use sp_runtime::traits::SaturatedConversion;
+	use sp_runtime::traits::{One, SaturatedConversion};
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 	use data_encoding::BASE64;
 	use frame_support::inherent::Vec;
+	use primitives::permission_capture::PermissionCaptureInterface;
+	use sp_io::hashing::blake2_256;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
+	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
@@ -88,6 +107,18 @@ pub mod pallet {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type Currency: ReservableCurrency<Self::AccountId>;
 		type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+
+		type PermissionCaptureInterface: PermissionCaptureInterface<
+			Self::AccountId,
+			OpaqueCall<Self>,
+			BalanceOf<Self>,
+		>;
+
+		/// The overarching call type.
+		type Call: Parameter
+			+ Dispatchable<Origin = Self::Origin, PostInfo = PostDispatchInfo>
+			+ GetDispatchInfo
+			+ From<frame_system::Call<Self>>;
 	}
 
 	/// store transfer limit
@@ -156,6 +187,7 @@ pub mod pallet {
 		TransferTimesTooMany,
 		AccountHasBeenFrozenForever,
 		AccountHasBeenFrozenTemporary,
+		PermissionTakenAccountHasPaddingCall,
 	}
 
 	#[pallet::call]
@@ -227,7 +259,7 @@ pub mod pallet {
 									who.clone(),
 									transfer_limit,
 								));
-								break;
+								break
 							}
 						}
 
@@ -270,7 +302,7 @@ pub mod pallet {
 									who.clone(),
 									transfer_limit,
 								));
-								break;
+								break
 							}
 						}
 
@@ -465,6 +497,35 @@ pub mod pallet {
 			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 
+			if T::PermissionCaptureInterface::is_account_permission_taken(who.clone()) {
+				let call = Call::<T>::safe_transfer { to: to.clone(), value };
+				let data = call.encode();
+				let call_wrapper = OpaqueCall::<T>::from_encoded(data.clone());
+
+				if T::PermissionCaptureInterface::has_account_pedding_call(who.clone()) {
+					if true {
+						//check the hash is the same
+
+						if true { //if tx is Approved
+							 //continue transfer
+						} else {
+							// Error: pedding call is not Approved
+						}
+					} else {
+						// Error: Already has a pedding call
+					}
+				} else {
+					let call_hash = blake2_256(call_wrapper.encoded());
+					T::PermissionCaptureInterface::add_call_to_approval_list(
+						who.clone(),
+						call_hash,
+						call_wrapper,
+						Default::default(),
+					);
+					return Ok(())
+				}
+			}
+
 			if transfer_limit_id == 0 {
 				log::info!("--------------------------------not set any transfer limit");
 				T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
@@ -492,7 +553,7 @@ pub mod pallet {
 												log::info!(
 													"--------------------------------freeze account forever"
 												);
-												break;
+												break
 											}
 										}
 									}
@@ -512,13 +573,13 @@ pub mod pallet {
 													{
 														log::info!("--------------------------------set mail status true");
 														MailStatus::<T>::put(true);
-														break;
+														break
 													}
 												}
 												log::info!(
 													"--------------------------------freeze account temporary "
 												);
-												break;
+												break
 											}
 										}
 									}
@@ -527,18 +588,17 @@ pub mod pallet {
 											MapRiskManagement::<T>::get(&i)
 										{
 											match MailStatus::<T>::get() {
-												Some(val) => {
+												Some(val) =>
 													if val != true {
 														log::info!("-------------------------------- mail status true is false,set mail status true");
 														MailStatus::<T>::put(true);
-													}
-												},
+													},
 												None => {
 													log::info!("-------------------------------- mail status true is none,set mail status true");
 													MailStatus::<T>::put(true);
 												},
 											}
-											break;
+											break
 										}
 									}
 									ensure!(times > 0, Error::<T>::TransferTimesTooMany);
@@ -562,7 +622,7 @@ pub mod pallet {
 											log::info!(
 												"--------------------------------freeze account forever"
 											);
-											break;
+											break
 										}
 									}
 								}
@@ -572,19 +632,18 @@ pub mod pallet {
 										MapRiskManagement::<T>::get(&i)
 									{
 										match MailStatus::<T>::get() {
-											Some(val) => {
+											Some(val) =>
 												if val != true {
 													log::info!("--------------------------------mail status true is false,set mail status true");
 
 													MailStatus::<T>::put(true);
-												}
-											},
+												},
 											None => {
 												log::info!("-------------------------------- mail status true is none,set mail status true");
 												MailStatus::<T>::put(true);
 											},
 										}
-										break;
+										break
 									}
 								}
 
@@ -600,7 +659,7 @@ pub mod pallet {
 											log::info!(
 												"--------------------------------freeze account temporary "
 											);
-											break;
+											break
 										}
 									}
 								}
@@ -628,7 +687,7 @@ pub mod pallet {
 						},
 					}
 					match BlockTime::<T>::get() {
-						Some(val) => {
+						Some(val) =>
 							if val == true {
 								for i in 0..risk_management_id {
 									if let Some((
@@ -638,8 +697,8 @@ pub mod pallet {
 									{
 										let now = frame_system::Pallet::<T>::block_number();
 
-										if now.saturated_into::<u64>() - freeze_time % 6
-											>= block_number.saturated_into::<u64>()
+										if now.saturated_into::<u64>() - freeze_time % 6 >=
+											block_number.saturated_into::<u64>()
 										{
 											BlockAccount::<T>::put(false);
 
@@ -665,8 +724,7 @@ pub mod pallet {
 								}
 							} else {
 								log::info!("--------------------------------health amount")
-							}
-						},
+							},
 						None => {
 							log::info!("--------------------------------health amount")
 						},
@@ -722,7 +780,7 @@ pub mod pallet {
 									Ok(v) => v,
 									Err(e) => {
 										log::info!("------decode receiver error  {:?}", e);
-										continue;
+										continue
 									},
 								};
 
@@ -732,7 +790,7 @@ pub mod pallet {
 									Ok(v) => v,
 									Err(e) => {
 										log::info!("------decode subject error  {:?}", e);
-										continue;
+										continue
 									},
 								};
 
@@ -742,7 +800,7 @@ pub mod pallet {
 									Ok(v) => v,
 									Err(e) => {
 										log::info!("------decode content error  {:?}", e);
-										continue;
+										continue
 									},
 								};
 
@@ -804,7 +862,7 @@ pub mod pallet {
 				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 			if response.code != 200 {
 				log::warn!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown);
+				return Err(http::Error::Unknown)
 			} else {
 				log::info!("email send successfully")
 			}
@@ -823,7 +881,7 @@ pub mod pallet {
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				);
+				)
 			}
 
 			let results = signer.send_signed_transaction(|_account| Call::reset_email_status {});

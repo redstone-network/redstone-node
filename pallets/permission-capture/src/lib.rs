@@ -455,5 +455,9 @@ pub mod pallet {
 
 			return true
 		}
+
+		fn clear_call(hash: &[u8; 32]) {
+			if let Some((_, who, deposit)) = Calls::<T>::take(hash) {}
+		}
 	}
 }
