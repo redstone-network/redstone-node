@@ -85,6 +85,13 @@ pub struct Proposal<AccountId> {
 	pub statue: ProposalStatue,
 }
 
+/// An open multisig operation.
+#[derive(Clone, Eq, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
+pub struct ActiveCall<Friends> {
+	/// The approvals achieved so far, including the depositor. Always sorted.
+	approvals: Friends,
+}
+
 type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
 
 type CallHash = [u8; 32];
@@ -163,6 +170,15 @@ pub mod pallet {
 		StorageMap<_, Identity, [u8; 32], (OpaqueCall<T>, T::AccountId, BalanceOf<T>)>;
 	#[pallet::storage]
 	pub type OwnerCalls<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, [u8; 32]>;
+	#[pallet::storage]
+	pub type ActiveCalls<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		T::AccountId,
+		Blake2_128Concat,
+		[u8; 32],
+		ActiveCall<FriendsOf<T>>,
+	>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/main-docs/build/events-errors/
@@ -412,8 +428,8 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn operational_voting(
 			origin: OriginFor<T>, //friends
-			_hash: [u8; 32],
-			_vote: u16,
+			hash: [u8; 32],
+			vote: u16,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
@@ -441,9 +457,29 @@ pub mod pallet {
 		fn is_account_permission_taken(account: T::AccountId) -> bool {
 			<MapPermissionTaken<T>>::contains_key(account)
 		}
+
 		fn has_account_pedding_call(account: T::AccountId) -> bool {
 			<OwnerCalls<T>>::contains_key(account)
 		}
+
+		fn is_the_same_hash(account: T::AccountId, call_hash: [u8; 32]) -> bool {
+			<ActiveCalls<T>>::contains_key(account, call_hash)
+		}
+
+		fn is_call_approved(account: T::AccountId, call_hash: [u8; 32]) -> bool {
+			if <Captureable<T>>::contains_key(account.clone()) {
+				let capture_config = Captureable::<T>::get(account.clone()).unwrap_or_default();
+				if <ActiveCalls<T>>::contains_key(account.clone(), call_hash) {
+					let active_call =
+						ActiveCalls::<T>::get(account.clone(), call_hash).unwrap_or_default();
+
+					return capture_config.threshold as usize <= active_call.approvals.len()
+				}
+			}
+
+			false
+		}
+
 		fn add_call_to_approval_list(
 			account: T::AccountId,
 			call_hash: [u8; 32],
@@ -451,13 +487,18 @@ pub mod pallet {
 			other_deposit: BalanceOf<T>,
 		) -> bool {
 			<OwnerCalls<T>>::insert(&account, &call_hash);
-			Calls::<T>::insert(&call_hash, (data, account, other_deposit));
+			Calls::<T>::insert(&call_hash, (data, account.clone(), other_deposit));
+			<ActiveCalls<T>>::insert(&account, call_hash, ActiveCall::default());
 
 			return true
 		}
 
 		fn clear_call(hash: &[u8; 32]) {
-			if let Some((_, who, deposit)) = Calls::<T>::take(hash) {}
+			if let Some((_, who, _deposit)) = Calls::<T>::take(hash) {
+				let _owner_call = OwnerCalls::<T>::take(who.clone());
+
+				let _active_call = ActiveCalls::<T>::take(who.clone(), hash);
+			}
 		}
 	}
 }

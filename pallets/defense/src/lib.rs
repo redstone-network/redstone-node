@@ -85,6 +85,7 @@ pub enum RiskManagement {
 pub mod pallet {
 	use super::*;
 	use frame_support::{
+		fail,
 		pallet_prelude::*,
 		traits::{Currency, ExistenceRequirement, ReservableCurrency},
 	};
@@ -188,6 +189,7 @@ pub mod pallet {
 		AccountHasBeenFrozenForever,
 		AccountHasBeenFrozenTemporary,
 		PermissionTakenAccountHasPaddingCall,
+		PermissionTakenAccountCallMustBeApproved,
 	}
 
 	#[pallet::call]
@@ -501,21 +503,19 @@ pub mod pallet {
 				let call = Call::<T>::safe_transfer { to: to.clone(), value };
 				let data = call.encode();
 				let call_wrapper = OpaqueCall::<T>::from_encoded(data.clone());
+				let call_hash = blake2_256(call_wrapper.encoded());
 
 				if T::PermissionCaptureInterface::has_account_pedding_call(who.clone()) {
-					if true {
-						//check the hash is the same
-
-						if true { //if tx is Approved
-							 //continue transfer
-						} else {
-							// Error: pedding call is not Approved
-						}
+					if T::PermissionCaptureInterface::is_the_same_hash(who.clone(), call_hash) {
+						ensure!(
+							T::PermissionCaptureInterface::is_call_approved(who.clone(), call_hash),
+							Error::<T>::PermissionTakenAccountCallMustBeApproved
+						);
 					} else {
 						// Error: Already has a pedding call
+						fail!(Error::<T>::PermissionTakenAccountHasPaddingCall)
 					}
 				} else {
-					let call_hash = blake2_256(call_wrapper.encoded());
 					T::PermissionCaptureInterface::add_call_to_approval_list(
 						who.clone(),
 						call_hash,
