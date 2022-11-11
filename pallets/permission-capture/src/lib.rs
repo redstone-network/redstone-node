@@ -6,6 +6,7 @@ use frame_support::{
 	weights::{GetDispatchInfo, PostDispatchInfo, Weight},
 	BoundedVec, RuntimeDebug,
 };
+use frame_system::{self as system, RawOrigin};
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
@@ -86,10 +87,12 @@ pub struct Proposal<AccountId> {
 }
 
 /// An open multisig operation.
-#[derive(Clone, Eq, PartialEq, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
-pub struct ActiveCall<Friends> {
+#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub struct ActiveCall<Friends, OpaqueCall, AccountId, Balance> {
 	/// The approvals achieved so far, including the depositor. Always sorted.
 	approvals: Friends,
+	denys: Friends,
+	info: (OpaqueCall, AccountId, Balance),
 }
 
 type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
@@ -166,9 +169,6 @@ pub mod pallet {
 	pub type Proposals<T: Config> = StorageMap<_, Twox64Concat, u64, Proposal<T::AccountId>>;
 
 	#[pallet::storage]
-	pub type Calls<T: Config> =
-		StorageMap<_, Identity, [u8; 32], (OpaqueCall<T>, T::AccountId, BalanceOf<T>)>;
-	#[pallet::storage]
 	pub type OwnerCalls<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, [u8; 32]>;
 	#[pallet::storage]
 	pub type ActiveCalls<T: Config> = StorageDoubleMap<
@@ -177,7 +177,7 @@ pub mod pallet {
 		T::AccountId,
 		Blake2_128Concat,
 		[u8; 32],
-		ActiveCall<FriendsOf<T>>,
+		ActiveCall<FriendsOf<T>, OpaqueCall<T>, T::AccountId, BalanceOf<T>>,
 	>;
 
 	// Pallets use events to inform users when important changes are made.
@@ -206,6 +206,7 @@ pub mod pallet {
 		MustProposalByFriends,
 		ProposalAlreadyCreated,
 		MustVoteByFriends,
+		ActiveCallNotExist,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -428,10 +429,58 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn operational_voting(
 			origin: OriginFor<T>, //friends
+			account: T::AccountId,
 			hash: [u8; 32],
 			vote: u16,
 		) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+			let who = ensure_signed(origin)?;
+
+			let capture_config =
+				Self::capture_config(&account).ok_or(Error::<T>::NotCaptureable)?;
+			ensure!(capture_config.friends.contains(&who), Error::<T>::MustVoteByFriends);
+
+			ensure!(
+				<ActiveCalls<T>>::contains_key(account.clone(), hash),
+				Error::<T>::ActiveCallNotExist
+			);
+
+			let mut active_call = ActiveCalls::<T>::get(account.clone(), hash).unwrap();
+
+			match vote {
+				0 => {
+					match active_call.approvals.binary_search(&who) {
+						Ok(_pos) => return Err(Error::<T>::AlreadyApproved.into()),
+						Err(pos) => active_call
+							.approvals
+							.try_insert(pos, who.clone())
+							.map_err(|()| Error::<T>::MaxFriends)?,
+					}
+					<ActiveCalls<T>>::insert(account.clone(), hash, &active_call);
+
+					if let Some(call) = active_call.info.0.try_decode() {
+						if capture_config.threshold as usize <= active_call.approvals.len() {
+							Self::clear_call(account.clone(), &hash);
+
+							let result = call.dispatch(RawOrigin::Signed(account.clone()).into());
+						}
+					}
+				},
+				1 => {
+					match active_call.denys.binary_search(&who) {
+						Ok(_pos) => return Err(Error::<T>::AlreadyApproved.into()),
+						Err(pos) => active_call
+							.denys
+							.try_insert(pos, who.clone())
+							.map_err(|()| Error::<T>::MaxFriends)?,
+					}
+					<ActiveCalls<T>>::insert(account.clone(), hash, &active_call);
+
+					if capture_config.threshold as usize <= active_call.denys.len() {
+						Self::clear_call(account.clone(), &hash);
+					}
+				},
+				_ => {},
+			}
 
 			Ok(())
 		}
@@ -448,6 +497,11 @@ pub mod pallet {
 			);
 
 			Ok(())
+		}
+
+		fn clear_call(account: T::AccountId, hash: &[u8; 32]) {
+			let _owner_call = OwnerCalls::<T>::take(account.clone());
+			let _active_call = ActiveCalls::<T>::take(account.clone(), hash);
 		}
 	}
 
@@ -470,8 +524,7 @@ pub mod pallet {
 			if <Captureable<T>>::contains_key(account.clone()) {
 				let capture_config = Captureable::<T>::get(account.clone()).unwrap_or_default();
 				if <ActiveCalls<T>>::contains_key(account.clone(), call_hash) {
-					let active_call =
-						ActiveCalls::<T>::get(account.clone(), call_hash).unwrap_or_default();
+					let active_call = ActiveCalls::<T>::get(account.clone(), call_hash).unwrap();
 
 					return capture_config.threshold as usize <= active_call.approvals.len()
 				}
@@ -487,18 +540,17 @@ pub mod pallet {
 			other_deposit: BalanceOf<T>,
 		) -> bool {
 			<OwnerCalls<T>>::insert(&account, &call_hash);
-			Calls::<T>::insert(&call_hash, (data, account.clone(), other_deposit));
-			<ActiveCalls<T>>::insert(&account, call_hash, ActiveCall::default());
+			<ActiveCalls<T>>::insert(
+				&account,
+				call_hash,
+				ActiveCall {
+					approvals: FriendsOf::<T>::default(),
+					denys: FriendsOf::<T>::default(),
+					info: (data, account.clone(), other_deposit),
+				},
+			);
 
 			return true
-		}
-
-		fn clear_call(hash: &[u8; 32]) {
-			if let Some((_, who, _deposit)) = Calls::<T>::take(hash) {
-				let _owner_call = OwnerCalls::<T>::take(who.clone());
-
-				let _active_call = ActiveCalls::<T>::take(who.clone(), hash);
-			}
 		}
 	}
 }

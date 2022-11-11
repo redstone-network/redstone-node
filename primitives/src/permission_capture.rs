@@ -9,5 +9,4 @@ pub trait PermissionCaptureInterface<AccountId, OpaqueCall, Balance> {
 		data: OpaqueCall,
 		other_deposit: Balance,
 	) -> bool;
-	fn clear_call(hash: &[u8; 32]);
 }
