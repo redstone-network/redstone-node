@@ -4,14 +4,17 @@ use frame_support::{
 	traits::{ConstU16, ConstU64},
 };
 use frame_system as system;
-use sp_core::H256;
+use pallet_defense::{Call as DefenseCall, Error as DefenseError};
+use pallet_difttt::crypto::TestAuthId;
+use sp_core::{sr25519::Signature, H256};
 use sp_runtime::{
-	testing::Header,
-	traits::{BlakeTwo256, IdentityLookup},
+	testing::{Header, TestXt},
+	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+type OpaqueCall = super::OpaqueCall<Test>;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -23,6 +26,7 @@ frame_support::construct_runtime!(
 		System: frame_system,
 		Balances: pallet_balances,
 		PermissionCaptureModule: pallet_permission_capture,
+		DefenseModule: pallet_defense,
 	}
 );
 
@@ -37,7 +41,7 @@ impl system::Config for Test {
 	type BlockNumber = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type AccountId = u64;
+	type AccountId = sp_core::sr25519::Public;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
 	type Event = Event;
@@ -69,6 +73,14 @@ impl pallet_balances::Config for Test {
 	type WeightInfo = ();
 }
 
+impl pallet_defense::Config for Test {
+	type Event = Event;
+	type Call = Call;
+	type Currency = Balances;
+	type AuthorityId = TestAuthId;
+	type PermissionCaptureInterface = PermissionCaptureModule;
+}
+
 parameter_types! {
 	pub const MaxFriends: u32 = 128;
 }
@@ -80,7 +92,41 @@ impl pallet_permission_capture::Config for Test {
 	type Call = Call;
 }
 
+type Extrinsic = TestXt<Call, ()>;
+type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+
+impl frame_system::offchain::SigningTypes for Test {
+	type Public = <Signature as Verify>::Signer;
+	type Signature = Signature;
+}
+
+impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
+where
+	Call: From<LocalCall>,
+{
+	type OverarchingCall = Call;
+	type Extrinsic = Extrinsic;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
+where
+	Call: From<LocalCall>,
+{
+	fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+		call: Call,
+		_public: <Signature as Verify>::Signer,
+		_account: AccountId,
+		nonce: u64,
+	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+		Some((call, (nonce, ())))
+	}
+}
+
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+}
+
+fn call_transfer(to: sp_core::sr25519::Public, value: u128) -> Call {
+	Call::DefenseModule(DefenseCall::safe_transfer { to, value })
 }

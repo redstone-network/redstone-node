@@ -25,6 +25,7 @@ primitives = { package = "acala-primitives", path = "../../primitives", default-
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
+pallet-defense = { path = "../defense", default-features = false }
 
 [features]
 default = ["std"]
@@ -37,5 +38,6 @@ std = [
 	"frame-system/std",
 	"sp-std/std",
 	"pallet-difttt/std",
+	"pallet-defense/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
