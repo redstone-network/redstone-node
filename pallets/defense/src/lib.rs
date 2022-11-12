@@ -11,7 +11,6 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{traits::ConstU32, BoundedVec};
 use pallet_difttt::Action;
 use scale_info::TypeInfo;
 use sp_runtime::offchain::{http, Duration};
@@ -59,11 +58,6 @@ pub enum TransferLimit<Balance> {
 pub enum RiskManagement {
 	TimeFreeze(u64, u64), // freeze duration
 	AccountFreeze(bool),
-	Mail(
-		BoundedVec<u8, ConstU32<256>>, // receiver
-		BoundedVec<u8, ConstU32<256>>, // title
-		BoundedVec<u8, ConstU32<256>>, // message body
-	),
 }
 
 #[frame_support::pallet]
@@ -77,6 +71,7 @@ pub mod pallet {
 	use sp_runtime::traits::SaturatedConversion;
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+	use codec::alloc::string::ToString;
 	use data_encoding::BASE64;
 	use frame_support::inherent::Vec;
 	use pallet_notification::NotificationInfoInterface;
@@ -134,16 +129,25 @@ pub mod pallet {
 	pub type BlockTime<T> = StorageValue<_, bool>;
 
 	#[pallet::storage]
+	#[pallet::getter(fn next_account_index)]
+	pub type NextNotifyAccountIndex<T: Config> = StorageValue<_, u64>;
+
+	/// store risk management
+	#[pallet::storage]
+	#[pallet::getter(fn notify_account_map)]
+	pub(super) type MapNotifyAccount<T: Config> = StorageMap<_, Twox64Concat, u64, T::AccountId>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn mail_status)]
-	pub type MailStatus<T> = StorageValue<_, bool>;
+	pub(super) type MailStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn slack_status)]
-	pub type SlackStatus<T> = StorageValue<_, bool>;
+	pub(super) type SlackStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn discord_status)]
-	pub type DiscordStatus<T> = StorageValue<_, bool>;
+	pub(super) type DiscordStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -177,10 +181,7 @@ pub mod pallet {
 			transfer_limit: TransferLimit<BalanceOf<T>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-
 			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
-
-			log::info!("--------------transfer_limit_id: {}", transfer_limit_id);
 
 			if transfer_limit_id == 0 {
 				match transfer_limit {
@@ -341,18 +342,10 @@ pub mod pallet {
 							risk_management.clone(),
 						));
 					},
-					RiskManagement::Mail(_, _, _) => {
-						log::info!("--------------------------------set notify mail");
-						Self::deposit_event(Event::RiskManagementMailSet(
-							who.clone(),
-							risk_management.clone(),
-						));
-					},
 				}
 			} else {
 				let mut freeze_time_set = false;
 				let mut freeze_account_set = false;
-				let mut notify_mail_set = false;
 
 				match risk_management {
 					RiskManagement::TimeFreeze(_, _) => {
@@ -417,49 +410,6 @@ pub mod pallet {
 							));
 						}
 					},
-					RiskManagement::Mail(_, _, _) => {
-						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::Mail(_, _, _))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								notify_mail_set = true;
-
-								log::info!("--------------------------------update notify email");
-
-								// MapTransferLimit::<T>::insert(i, transfer_limit.clone());
-								MapRiskManagement::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										risk_management.clone(),
-									))
-								});
-								log::info!("change notify mail successfully");
-
-								Self::deposit_event(Event::RiskManagementMailUpdated(
-									who.clone(),
-									risk_management.clone(),
-								));
-							}
-						}
-						if notify_mail_set == false {
-							log::info!("--------------------------------set notify mail");
-							MapRiskManagement::<T>::insert(
-								risk_management_id,
-								(
-									frame_system::Pallet::<T>::block_number(),
-									risk_management.clone(),
-								),
-							);
-							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-							NextRiskManagementId::<T>::put(
-								risk_management_id.saturating_add(One::one()),
-							);
-							Self::deposit_event(Event::RiskManagementMailSet(
-								who.clone(),
-								risk_management.clone(),
-							));
-						}
-					},
 				}
 			}
 
@@ -475,6 +425,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
+			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
 
 			if transfer_limit_id == 0 {
 				log::info!("--------------------------------not set any transfer limit");
@@ -488,11 +439,104 @@ pub mod pallet {
 				let mut set_freeze_account = false;
 
 				for i in 0..transfer_limit_id {
-					match MapTransferLimit::<T>::get(&i) {
-						Some((block_number, TransferLimit::TimesLimit(_start_time, times))) => {
-							let now = frame_system::Pallet::<T>::block_number();
-							if now - 100u32.into() < block_number {
-								if times <= 0 {
+					if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
+						match MapTransferLimit::<T>::get(&i) {
+							Some((block_number, TransferLimit::TimesLimit(_start_time, times))) => {
+								let now = frame_system::Pallet::<T>::block_number();
+								if now - 100u32.into() < block_number {
+									if times <= 0 {
+										for i in 0..risk_management_id {
+											if let Some((
+												_,
+												RiskManagement::AccountFreeze(freeze),
+											)) = MapRiskManagement::<T>::get(&i)
+											{
+												if freeze == true {
+													BlockAccount::<T>::put(true);
+													set_freeze_account = true;
+													log::info!(
+														"--------------------------------freeze account forever"
+													);
+
+													break;
+												}
+											}
+										}
+										if set_freeze_account == false {
+											for i in 0..risk_management_id {
+												if let Some((
+													_block_number,
+													RiskManagement::TimeFreeze(_, _freeze_time),
+												)) = MapRiskManagement::<T>::get(&i)
+												{
+													BlockTime::<T>::put(true);
+													break;
+												}
+											}
+										}
+
+										match T::Notification::get_mail_config_action(who.clone()) {
+											Some(_) => {
+												log::info!("-------------------------------- mail with token status is none,set mail status true");
+												MailStatus::<T>::insert(who.clone(), true);
+												MapNotifyAccount::<T>::insert(
+													next_notify_account_index,
+													who.clone(),
+												);
+												NextNotifyAccountIndex::<T>::put(
+													next_notify_account_index
+														.saturating_add(One::one()),
+												);
+											},
+											_ => {},
+										}
+										match T::Notification::get_slack_config_action(who.clone())
+										{
+											Some(_) => {
+												log::info!("-------------------------------- slack status is none,set mail status true");
+												SlackStatus::<T>::insert(who.clone(), true);
+												MapNotifyAccount::<T>::insert(
+													next_notify_account_index,
+													who.clone(),
+												);
+												NextNotifyAccountIndex::<T>::put(
+													next_notify_account_index
+														.saturating_add(One::one()),
+												);
+											},
+											_ => {},
+										}
+										match T::Notification::get_discord_config_action(
+											who.clone(),
+										) {
+											Some(_) => {
+												log::info!("-------------------------------- discord with token status is none,set mail status true");
+												DiscordStatus::<T>::insert(who.clone(), true);
+												MapNotifyAccount::<T>::insert(
+													next_notify_account_index,
+													who.clone(),
+												);
+												NextNotifyAccountIndex::<T>::put(
+													next_notify_account_index
+														.saturating_add(One::one()),
+												);
+											},
+											_ => {},
+										}
+
+										ensure!(times > 0, Error::<T>::TransferTimesTooMany);
+									} else {
+										satisfy_times_limit = true;
+									}
+								} else {
+									satisfy_times_limit = true;
+								}
+							},
+							Some((
+								_block_number,
+								TransferLimit::AmountLimit(_start_time, amount),
+							)) => {
+								if value > amount {
 									for i in 0..risk_management_id {
 										if let Some((_, RiskManagement::AccountFreeze(freeze))) =
 											MapRiskManagement::<T>::get(&i)
@@ -500,6 +544,7 @@ pub mod pallet {
 											if freeze == true {
 												BlockAccount::<T>::put(true);
 												set_freeze_account = true;
+
 												log::info!(
 													"--------------------------------freeze account forever"
 												);
@@ -507,6 +552,53 @@ pub mod pallet {
 											}
 										}
 									}
+
+									match T::Notification::get_mail_config_action(who.clone()) {
+										Some(_) => {
+											log::info!("-------------------------------- mail with token status is none,set mail status true");
+											MailStatus::<T>::insert(who.clone(), true);
+											MapNotifyAccount::<T>::insert(
+												next_notify_account_index,
+												who.clone(),
+											);
+											NextNotifyAccountIndex::<T>::put(
+												next_notify_account_index
+													.saturating_add(One::one()),
+											);
+										},
+										_ => {},
+									}
+									match T::Notification::get_slack_config_action(who.clone()) {
+										Some(_) => {
+											log::info!("-------------------------------- slack status is none,set mail status true");
+											SlackStatus::<T>::insert(who.clone(), true);
+											MapNotifyAccount::<T>::insert(
+												next_notify_account_index,
+												who.clone(),
+											);
+											NextNotifyAccountIndex::<T>::put(
+												next_notify_account_index
+													.saturating_add(One::one()),
+											);
+										},
+										_ => {},
+									}
+									match T::Notification::get_discord_config_action(who.clone()) {
+										Some(_) => {
+											log::info!("-------------------------------- discord with token status is none,set mail status true");
+											DiscordStatus::<T>::insert(who.clone(), true);
+											MapNotifyAccount::<T>::insert(
+												next_notify_account_index,
+												who.clone(),
+											);
+											NextNotifyAccountIndex::<T>::put(
+												next_notify_account_index
+													.saturating_add(One::one()),
+											);
+										},
+										_ => {},
+									}
+
 									if set_freeze_account == false {
 										for i in 0..risk_management_id {
 											if let Some((
@@ -515,17 +607,7 @@ pub mod pallet {
 											)) = MapRiskManagement::<T>::get(&i)
 											{
 												BlockTime::<T>::put(true);
-												for i in 0..risk_management_id {
-													if let Some((
-														_,
-														RiskManagement::Mail(_, _, _),
-													)) = MapRiskManagement::<T>::get(&i)
-													{
-														log::info!("--------------------------------set mail status true");
-														MailStatus::<T>::put(true);
-														break;
-													}
-												}
+
 												log::info!(
 													"--------------------------------freeze account temporary "
 												);
@@ -533,140 +615,16 @@ pub mod pallet {
 											}
 										}
 									}
-									for i in 0..risk_management_id {
-										if let Some((_, RiskManagement::Mail(_, _, _))) =
-											MapRiskManagement::<T>::get(&i)
-										{
-											match MailStatus::<T>::get() {
-												Some(val) => {
-													if val != true {
-														log::info!("-------------------------------- mail status true is false,set mail status true");
-														MailStatus::<T>::put(true);
-													}
-												},
-												None => {
-													log::info!("-------------------------------- mail status true is none,set mail status true");
-													MailStatus::<T>::put(true);
-												},
-											}
-											break;
-										}
-									}
-									match T::Notification::get_mail_config_action(who.clone()) {
-										Some(_) => {
-											log::info!("-------------------------------- mail with token status is none,set mail status true");
-											MailStatus::<T>::put(true);
-										},
-										_ => {},
-									}
-									match T::Notification::get_slack_config_action(who.clone()) {
-										Some(_) => {
-											log::info!("-------------------------------- slack status is none,set mail status true");
-											SlackStatus::<T>::put(true);
-										},
-										_ => {},
-									}
-									match T::Notification::get_discord_config_action(who.clone()) {
-										Some(_) => {
-											log::info!("-------------------------------- discord with token status is none,set mail status true");
-											DiscordStatus::<T>::put(true);
-										},
-										_ => {},
-									}
-									ensure!(times > 0, Error::<T>::TransferTimesTooMany);
-								} else {
-									satisfy_times_limit = true;
+									ensure!(amount > value, Error::<T>::TransferValueTooLarge);
 								}
-							} else {
-								satisfy_times_limit = true;
-							}
-						},
-						Some((_block_number, TransferLimit::AmountLimit(_start_time, amount))) => {
-							if value > amount {
-								for i in 0..risk_management_id {
-									if let Some((_, RiskManagement::AccountFreeze(freeze))) =
-										MapRiskManagement::<T>::get(&i)
-									{
-										if freeze == true {
-											BlockAccount::<T>::put(true);
-											set_freeze_account = true;
-
-											log::info!(
-												"--------------------------------freeze account forever"
-											);
-											break;
-										}
-									}
-								}
-
-								for i in 0..risk_management_id {
-									if let Some((_, RiskManagement::Mail(_, _, _))) =
-										MapRiskManagement::<T>::get(&i)
-									{
-										match MailStatus::<T>::get() {
-											Some(val) => {
-												if val != true {
-													log::info!("--------------------------------mail status true is false,set mail status true");
-
-													MailStatus::<T>::put(true);
-												}
-											},
-											None => {
-												log::info!("-------------------------------- mail status true is none,set mail status true");
-												MailStatus::<T>::put(true);
-											},
-										}
-										break;
-									}
-								}
-
-								match T::Notification::get_mail_config_action(who.clone()) {
-									Some(_) => {
-										log::info!("-------------------------------- mail with token status is none,set mail status true");
-										MailStatus::<T>::put(true);
-									},
-									_ => {},
-								}
-								match T::Notification::get_slack_config_action(who.clone()) {
-									Some(_) => {
-										log::info!("-------------------------------- slack status is none,set mail status true");
-										SlackStatus::<T>::put(true);
-									},
-									_ => {},
-								}
-								match T::Notification::get_discord_config_action(who.clone()) {
-									Some(_) => {
-										log::info!("-------------------------------- discord with token status is none,set mail status true");
-										DiscordStatus::<T>::put(true);
-									},
-									_ => {},
-								}
-
-								if set_freeze_account == false {
-									for i in 0..risk_management_id {
-										if let Some((
-											_block_number,
-											RiskManagement::TimeFreeze(_, _freeze_time),
-										)) = MapRiskManagement::<T>::get(&i)
-										{
-											BlockTime::<T>::put(true);
-
-											log::info!(
-												"--------------------------------freeze account temporary "
-											);
-											break;
-										}
-									}
-								}
-								ensure!(amount > value, Error::<T>::TransferValueTooLarge);
-							}
-							satisfy_amount_limit = true;
-						},
-						_ => {
-							log::info!(
-								"--------------------------------not set any transfer limit"
-							);
-						},
+								satisfy_amount_limit = true;
+							},
+							_ => {
+								log::info!(
+									"--------------------------------not set any transfer limit"
+								);
+							},
+						}
 					}
 				}
 				if satisfy_amount_limit == true || satisfy_times_limit == true {
@@ -697,9 +655,9 @@ pub mod pallet {
 										{
 											BlockAccount::<T>::put(false);
 
-											if let Some(val) = MailStatus::<T>::get() {
+											if let Some(val) = MailStatus::<T>::get(who.clone()) {
 												if val == true {
-													MailStatus::<T>::put(false);
+													MailStatus::<T>::insert(who.clone(), false);
 													log::info!(
 														"-------------------------------- reactivate email notification"
 													);
@@ -740,25 +698,28 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(0)]
-		pub fn reset_notification_status(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			let _who = ensure_signed(origin)?;
+		pub fn reset_notification_status(
+			origin: OriginFor<T>,
+			account: T::AccountId,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
 
-			if let Some(val) = MailStatus::<T>::get() {
+			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					MailStatus::<T>::put(false);
+					MailStatus::<T>::insert(account.clone(), false);
 					log::info!("-------------------------------- deactivate email notification");
 				}
 			}
-			if let Some(val) = MailStatus::<T>::get() {
+			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					DiscordStatus::<T>::put(false);
+					DiscordStatus::<T>::insert(account.clone(), false);
 					log::info!("-------------------------------- deactivate discord notification");
 				}
 			}
 
-			if let Some(val) = MailStatus::<T>::get() {
+			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					SlackStatus::<T>::put(false);
+					SlackStatus::<T>::insert(account.clone(), false);
 					log::info!("-------------------------------- deactivate slack notification");
 				}
 			}
@@ -771,218 +732,286 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
 			log::info!("Hi World from defense-pallet workers!: {:?}", block_number);
-			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
+			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
 
-			// 检查是否需要发送邮件
-			match MailStatus::<T>::get() {
-				Some(val) => {
-					if val == true {
-						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::Mail(receiver, title, message_body))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								log::info!("--------------------------------send email");
-
-								let to_email = match scale_info::prelude::string::String::from_utf8(
-									receiver.to_vec(),
-								) {
-									Ok(v) => v,
-									Err(e) => {
-										log::info!("------decode receiver error  {:?}", e);
-										continue;
-									},
-								};
-
-								let subject = match scale_info::prelude::string::String::from_utf8(
-									title.to_vec(),
-								) {
-									Ok(v) => v,
-									Err(e) => {
-										log::info!("------decode subject error  {:?}", e);
-										continue;
-									},
-								};
-
-								let content = match scale_info::prelude::string::String::from_utf8(
-									message_body.to_vec(),
-								) {
-									Ok(v) => v,
-									Err(e) => {
-										log::info!("------decode content error  {:?}", e);
-										continue;
-									},
-								};
-
-								let basic_url = "http://127.0.0.1:3030/get?";
-
-								let email = BASE64.encode(to_email[..].as_bytes());
-								let subject = BASE64.encode(subject[..].as_bytes());
-								let content = BASE64.encode(content[..].as_bytes());
-
-								let url = &scale_info::prelude::format!(
-									"{}email={}&subject={}&content={}",
-									basic_url,
-									email,
-									subject,
-									content
-								)[..];
-
-								match Self::send_email_info(url) {
-									Ok(val) => {
-										log::info!("email send successfully {:?}", val);
-										match Self::send_signed_tx() {
-											Ok(_) => {
-												log::info!("reset notification status as false")
-											},
-											Err(e) => {
-												log::info!(
-													"reset notification status as false failed {:?}",
-													e
-												);
-											},
-										};
-									},
-									Err(e) => log::info!("email send failed {:?}", e),
-								};
+			for i in 0..next_notify_account_index {
+				match MapNotifyAccount::<T>::get(i) {
+					Some(account) => {
+						if MailStatus::<T>::get(account.clone()) == Some(true) {
+							match Self::send_email_info(account.clone()) {
+								Ok(val) => {
+									log::info!("email send successfully {:?}", val);
+									match Self::send_signed_tx(account.clone()) {
+										Ok(_) => {
+											log::info!("reset notification status as false")
+										},
+										Err(e) => {
+											log::info!(
+												"reset notification status as false failed {:?}",
+												e
+											);
+										},
+									};
+								},
+								Err(e) => log::info!("email send failed {:?}", e),
 							}
+						} else if DiscordStatus::<T>::get(account.clone()) == Some(true) {
+							match Self::send_discord_info(account.clone()) {
+								Ok(val) => {
+									log::info!("email send successfully {:?}", val);
+									match Self::send_signed_tx(account.clone()) {
+										Ok(_) => {
+											log::info!("reset notification status as false")
+										},
+										Err(e) => {
+											log::info!(
+												"reset notification status as false failed {:?}",
+												e
+											);
+										},
+									};
+								},
+								Err(e) => log::info!("discord send failed {:?}", e),
+							}
+						} else if SlackStatus::<T>::get(account.clone()) == Some(true) {
+							match Self::send_slack_info(account.clone()) {
+								Ok(val) => {
+									log::info!("email send successfully {:?}", val);
+									match Self::send_signed_tx(account.clone()) {
+										Ok(_) => {
+											log::info!("reset notification status as false")
+										},
+										Err(e) => {
+											log::info!(
+												"reset notification status as false failed {:?}",
+												e
+											);
+										},
+									};
+								},
+								Err(e) => log::info!("slack send failed {:?}", e),
+							}
+						} else {
+							log::info!("no notify method available")
 						}
-					} else {
-						// log::info!("--------------------------------no need to send email");
-					}
-				},
-				None => {
-					// log::info!("--------------------------------no find email info");
-				},
-			}
-
-			match SlackStatus::<T>::get() {
-				Some(val) => {
-					if val == true {
-						Self::send_slack_info();
-					}
-				},
-				None => {},
-			}
-			match DiscordStatus::<T>::get() {
-				Some(val) => {
-					if val == true {
-						Self::send_discord_info();
-					}
-				},
-				None => {},
+					},
+					_ => {},
+				}
 			}
 		}
 	}
+
 	impl<T: Config> Pallet<T> {
-		fn send_email_info(url: &str) -> Result<u64, http::Error> {
-			// prepare for send request
-			// log::info!("--------------request url {:?}", url);
-			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+		fn send_email_info(account: T::AccountId) -> Result<u64, http::Error> {
+			match T::Notification::get_mail_config_action(account) {
+				Some(Action::MailWithToken(_, _, receiver, title, message_body)) => {
+					let to_email =
+						match scale_info::prelude::string::String::from_utf8(receiver.to_vec()) {
+							Ok(v) => v,
+							Err(e) => {
+								log::info!("------decode receiver error  {:?}", e);
+								"".to_string()
+							},
+						};
 
-			let request = http::Request::get(url);
+					let subject =
+						match scale_info::prelude::string::String::from_utf8(title.to_vec()) {
+							Ok(v) => v,
+							Err(e) => {
+								log::info!("------decode title error  {:?}", e);
+								"".to_string()
+							},
+						};
 
-			let pending = request.deadline(deadline).send().map_err(|e| {
-				log::info!("---------get pending error: {:?}", e);
-				http::Error::IoError
-			})?;
+					let content =
+						match scale_info::prelude::string::String::from_utf8(message_body.to_vec())
+						{
+							Ok(v) => v,
+							Err(e) => {
+								log::info!("------decode message body error  {:?}", e);
+								"".to_string()
+							},
+						};
 
-			let response =
-				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
-			if response.code != 200 {
-				log::warn!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown);
-			} else {
-				log::info!("email send successfully")
+					let basic_url = "http://127.0.0.1:3030/get?";
+
+					let email = BASE64.encode(to_email[..].as_bytes());
+					let subject = BASE64.encode(subject[..].as_bytes());
+					let content = BASE64.encode(content[..].as_bytes());
+
+					let url = &scale_info::prelude::format!(
+						"{}email={}&subject={}&content={}",
+						basic_url,
+						email,
+						subject,
+						content
+					)[..];
+
+					let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+					let request = http::Request::get(url);
+
+					let pending = request.deadline(deadline).send().map_err(|e| {
+						log::info!("---------get pending error: {:?}", e);
+						http::Error::IoError
+					})?;
+
+					let response =
+						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+					if response.code != 200 {
+						log::warn!("Unexpected status code: {}", response.code);
+						return Err(http::Error::Unknown);
+					} else {
+						log::info!("email send successfully")
+					}
+					let body = response.body().collect::<Vec<u8>>();
+					let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+						log::warn!("No UTF8 body");
+						http::Error::Unknown
+					})?;
+
+					log::info!("get return value: {}", body_str);
+				},
+				_ => {},
 			}
-			let body = response.body().collect::<Vec<u8>>();
-			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
-				log::warn!("No UTF8 body");
-				http::Error::Unknown
-			})?;
-
-			log::info!("get return value: {}", body_str);
 
 			Ok(0)
 		}
-		fn send_discord_info() -> Result<u64, http::Error> {
-			// prepare for send request
-			// log::info!("--------------request url {:?}", url);
+		fn send_discord_info(account: T::AccountId) -> Result<u64, http::Error> {
+			if let Some(Action::Discord(discord_hook_url, username, content)) =
+				T::Notification::get_discord_config_action(account)
+			{
+				let hook_url =
+					match scale_info::prelude::string::String::from_utf8(discord_hook_url.to_vec())
+					{
+						Ok(v) => v,
+						Err(e) => {
+							log::info!("------decode receiver error  {:?}", e);
+							"".to_string()
+						},
+					};
 
-			// match T::Notification::get_discord_config_action(who) {
-			// 	Some(Action::Discord(discord_hook_url, user_name, content)) => {
-			// 		log::info!("-------------------------------- discord with token status is none,set mail status true");
+				let name = match scale_info::prelude::string::String::from_utf8(username.to_vec()) {
+					Ok(v) => v,
+					Err(e) => {
+						log::info!("------decode title error  {:?}", e);
+						"".to_string()
+					},
+				};
 
-			// 		Self::send_discord_info();
-			// 	},
-			// 	_ => {},
-			// }
+				let message = match scale_info::prelude::string::String::from_utf8(content.to_vec())
+				{
+					Ok(v) => v,
+					Err(e) => {
+						log::info!("------decode message body error  {:?}", e);
+						"".to_string()
+					},
+				};
 
-			let url = "https://discord.com";
-			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+				let basic_url = "http://127.0.0.1:3030/get?";
 
-			let request = http::Request::get(url);
+				let discord_hook_url = BASE64.encode(hook_url[..].as_bytes());
+				let discord_user_name = BASE64.encode(name[..].as_bytes());
+				let discord_message = BASE64.encode(message[..].as_bytes());
 
-			let pending = request.deadline(deadline).send().map_err(|e| {
-				log::info!("---------get pending error: {:?}", e);
-				http::Error::IoError
-			})?;
+				let url = &scale_info::prelude::format!(
+					"{}email={}&subject={}&content={}",
+					basic_url,
+					discord_hook_url,
+					discord_user_name,
+					discord_message
+				)[..];
 
-			let response =
-				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
-			if response.code != 200 {
-				log::warn!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown);
-			} else {
-				log::info!("email send successfully")
+				let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+				let request = http::Request::get(url);
+
+				let pending = request.deadline(deadline).send().map_err(|e| {
+					log::info!("---------get pending error: {:?}", e);
+					http::Error::IoError
+				})?;
+
+				let response =
+					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+				if response.code != 200 {
+					log::warn!("Unexpected status code: {}", response.code);
+					return Err(http::Error::Unknown);
+				} else {
+					log::info!("email send successfully")
+				}
+				let body = response.body().collect::<Vec<u8>>();
+				let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+					log::warn!("No UTF8 body");
+					http::Error::Unknown
+				})?;
+
+				log::info!("get return value: {}", body_str);
 			}
-			let body = response.body().collect::<Vec<u8>>();
-			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
-				log::warn!("No UTF8 body");
-				http::Error::Unknown
-			})?;
-
-			log::info!("get return value: {}", body_str);
-
 			Ok(0)
 		}
-		fn send_slack_info() -> Result<u64, http::Error> {
-			// match T::Notification::get_slack_config_action(who) {
-			// 	Some(Action::Slack(slack_hook_url, message)) => {
-			// 		log::info!("-------------------------------- slack status is none,set mail status true");
-			// 	},
-			// 	_ => {},
-			// }
-			// prepare for send request
-			// log::info!("--------------request url {:?}", url);
-			let url = "https://slack.com";
-			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+		fn send_slack_info(account: T::AccountId) -> Result<u64, http::Error> {
+			if let Some(Action::Slack(slack_hook_url, content)) =
+				T::Notification::get_slack_config_action(account)
+			{
+				let hook_url =
+					match scale_info::prelude::string::String::from_utf8(slack_hook_url.to_vec()) {
+						Ok(v) => v,
+						Err(e) => {
+							log::info!("------decode receiver error  {:?}", e);
+							"".to_string()
+						},
+					};
 
-			let request = http::Request::get(url);
+				let message = match scale_info::prelude::string::String::from_utf8(content.to_vec())
+				{
+					Ok(v) => v,
+					Err(e) => {
+						log::info!("------decode message body error  {:?}", e);
+						"".to_string()
+					},
+				};
 
-			let pending = request.deadline(deadline).send().map_err(|e| {
-				log::info!("---------get pending error: {:?}", e);
-				http::Error::IoError
-			})?;
+				let basic_url = "http://127.0.0.1:3030/get?";
 
-			let response =
-				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
-			if response.code != 200 {
-				log::warn!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown);
-			} else {
-				log::info!("email send successfully")
+				let slack_hook_url = BASE64.encode(hook_url[..].as_bytes());
+				let slack_message = BASE64.encode(message[..].as_bytes());
+
+				let url = &scale_info::prelude::format!(
+					"{}email={}&subject={}",
+					basic_url,
+					slack_hook_url,
+					slack_message
+				)[..];
+
+				let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+				let request = http::Request::get(url);
+
+				let pending = request.deadline(deadline).send().map_err(|e| {
+					log::info!("---------get pending error: {:?}", e);
+					http::Error::IoError
+				})?;
+
+				let response =
+					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+				if response.code != 200 {
+					log::warn!("Unexpected status code: {}", response.code);
+					return Err(http::Error::Unknown);
+				} else {
+					log::info!("email send successfully")
+				}
+				let body = response.body().collect::<Vec<u8>>();
+				let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+					log::warn!("No UTF8 body");
+					http::Error::Unknown
+				})?;
+
+				log::info!("get return value: {}", body_str);
 			}
-			let body = response.body().collect::<Vec<u8>>();
-			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
-				log::warn!("No UTF8 body");
-				http::Error::Unknown
-			})?;
-
-			log::info!("get return value: {}", body_str);
-
 			Ok(0)
 		}
-		fn send_signed_tx() -> Result<(), &'static str> {
+
+		fn send_signed_tx(account: T::AccountId) -> Result<(), &'static str> {
 			let signer = Signer::<T, T::AuthorityId>::all_accounts();
 			if !signer.can_sign() {
 				return Err(
@@ -990,8 +1019,9 @@ pub mod pallet {
 				);
 			}
 
-			let results =
-				signer.send_signed_transaction(|_account| Call::reset_notification_status {});
+			let results = signer.send_signed_transaction(|_account| {
+				Call::reset_notification_status { account: account.clone() }
+			});
 
 			log::info!("-------- results");
 
