@@ -13,7 +13,7 @@ mod benchmarking;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
 	traits::{ConstU32, WrapperKeepOpaque},
-	weights::{GetDispatchInfo, PostDispatchInfo, Weight},
+	weights::{GetDispatchInfo, PostDispatchInfo},
 	BoundedVec,
 };
 use scale_info::TypeInfo;
@@ -30,11 +30,6 @@ use sp_core::crypto::KeyTypeId;
 pub type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
 
 pub type CallHash = [u8; 32];
-
-pub enum CallOrHash<T: Config> {
-	Call(OpaqueCall<T>, bool),
-	Hash([u8; 32]),
-}
 
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ocwd");
 pub mod crypto {
@@ -508,8 +503,6 @@ pub mod pallet {
 
 				let call_wrapper = OpaqueCall::<T>::from_encoded(data.clone());
 				let call_hash = blake2_256(&data);
-
-				let t: <T as pallet::Config>::Call = call_wrapper.try_decode().unwrap();
 
 				if T::PermissionCaptureInterface::has_account_pedding_call(who.clone()) {
 					if T::PermissionCaptureInterface::is_the_same_hash(who.clone(), call_hash) {

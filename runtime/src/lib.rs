@@ -77,9 +77,10 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 use static_assertions::const_assert;
 
-use node_primitives::{evm::EvmAddress, CurrencyId, TokenSymbol};
+use node_primitives::{custom_call::CustomCallInterface, evm::EvmAddress, CurrencyId, TokenSymbol};
 use orml_currencies::BasicCurrencyAdapter;
 use orml_traits::MultiReservableCurrency;
+use pallet_defense::Call as DefenseCall;
 use support::{DEXIncentives, Erc20InfoMapping};
 
 #[cfg(any(feature = "std", test))]
@@ -298,18 +299,17 @@ impl InstanceFilter<Call> for ProxyType {
 			ProxyType::Any => true,
 			ProxyType::NonTransfer => !matches!(
 				c,
-				Call::Balances(..)
-					| Call::Assets(..) | Call::Uniques(..)
-					| Call::Vesting(pallet_vesting::Call::vested_transfer { .. })
-					| Call::Indices(pallet_indices::Call::transfer { .. })
+				Call::Balances(..) |
+					Call::Assets(..) | Call::Uniques(..) |
+					Call::Vesting(pallet_vesting::Call::vested_transfer { .. }) |
+					Call::Indices(pallet_indices::Call::transfer { .. })
 			),
 			ProxyType::Governance => matches!(
 				c,
-				Call::Democracy(..)
-					| Call::Council(..) | Call::Society(..)
-					| Call::TechnicalCommittee(..)
-					| Call::Elections(..)
-					| Call::Treasury(..)
+				Call::Democracy(..) |
+					Call::Council(..) | Call::Society(..) |
+					Call::TechnicalCommittee(..) |
+					Call::Elections(..) | Call::Treasury(..)
 			),
 			ProxyType::Staking => matches!(c, Call::Staking(..)),
 		}
@@ -644,8 +644,8 @@ impl Get<Option<(usize, ExtendedBalance)>> for OffchainRandomBalancing {
 			max => {
 				let seed = sp_io::offchain::random_seed();
 				let random = <u32>::decode(&mut TrailingZeroInput::new(&seed))
-					.expect("input is padded with zeroes; qed")
-					% max.saturating_add(1);
+					.expect("input is padded with zeroes; qed") %
+					max.saturating_add(1);
 				random as usize
 			},
 		};
@@ -1185,10 +1185,21 @@ impl pallet_difttt::Config for Runtime {
 	type AuthorityId = pallet_difttt::crypto::TestAuthId;
 }
 
+pub struct CustomCall;
+impl CustomCallInterface<AccountId, u128> for CustomCall {
+	fn call_transfer(to: AccountId, value: u128) -> Vec<u8> {
+		let call = Call::DefenseModule(DefenseCall::safe_transfer { to, value });
+		call.encode()
+	}
+}
+
 impl pallet_defense::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
 	type AuthorityId = pallet_defense::crypto::OcwAuthId;
+	type PermissionCaptureInterface = PermissionCapture;
+	type Call = Call;
+	type CustomCallInterface = CustomCall;
 }
 
 parameter_types! {

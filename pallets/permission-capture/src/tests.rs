@@ -1,12 +1,8 @@
 use super::*;
 use crate::{mock::*, Error};
 use frame_support::{assert_noop, assert_ok};
-use sp_core::{
-	offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
-	sr25519::{Public, Signature},
-};
+use sp_core::sr25519::Public;
 use sp_io::hashing::blake2_256;
-use std::sync::Arc;
 
 #[test]
 fn it_works_for_create_get_account_permissions() {
@@ -545,6 +541,5 @@ fn it_works_for_operational_voting_cancel() {
 
 		assert_eq!(OwnerCalls::<Test>::get(Public::from_raw([0; 32])), None);
 		assert_eq!(ActiveCalls::<Test>::get(Public::from_raw([0; 32]), hash), None);
-
 	});
 }

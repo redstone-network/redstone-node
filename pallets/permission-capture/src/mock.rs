@@ -5,7 +5,7 @@ use frame_support::{
 	traits::{ConstU16, ConstU64},
 };
 use frame_system as system;
-use pallet_defense::{Call as DefenseCall, Error as DefenseError};
+use pallet_defense::Call as DefenseCall;
 use pallet_difttt::crypto::TestAuthId;
 use primitives::custom_call::CustomCallInterface;
 use sp_core::{
@@ -19,7 +19,6 @@ use sp_runtime::{
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
-type OpaqueCall = super::OpaqueCall<Test>;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(

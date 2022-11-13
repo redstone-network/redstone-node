@@ -83,13 +83,13 @@ pub mod pallet {
 			let mut bound_body = BoundedVec::<u8, ConstU32<256>>::default();
 
 			for x in receiver.iter() {
-				bound_receiver.try_push(*x);
+				let _rt = bound_receiver.try_push(*x);
 			}
 			for x in title.iter() {
-				bound_title.try_push(*x);
+				let _rt = bound_title.try_push(*x);
 			}
 			for x in body.iter() {
-				bound_body.try_push(*x);
+				let _rt = bound_body.try_push(*x);
 			}
 
 			let mail = Action::MailWithToken(
@@ -117,14 +117,11 @@ pub mod pallet {
 			let mut bound_hook_url = BoundedVec::<u8, ConstU32<256>>::default();
 			let mut bound_message = BoundedVec::<u8, ConstU32<256>>::default();
 
-			hook_url.iter().map(|x| bound_hook_url.try_push(*x));
-			message.iter().map(|x| bound_message.try_push(*x));
-
 			for x in hook_url.iter() {
-				bound_hook_url.try_push(*x);
+				let _rt = bound_hook_url.try_push(*x);
 			}
 			for x in message.iter() {
-				bound_message.try_push(*x);
+				let _rt = bound_message.try_push(*x);
 			}
 
 			let slack = Action::Slack(bound_hook_url, bound_message);
@@ -149,13 +146,13 @@ pub mod pallet {
 			let mut bound_content = BoundedVec::<u8, ConstU32<256>>::default();
 
 			for x in hook_url.iter() {
-				bound_hook_url.try_push(*x);
+				let _rt = bound_hook_url.try_push(*x);
 			}
 			for x in user.iter() {
-				bound_user.try_push(*x);
+				let _rt = bound_user.try_push(*x);
 			}
 			for x in content.iter() {
-				bound_content.try_push(*x);
+				let _rt = bound_content.try_push(*x);
 			}
 
 			let discord = Action::Discord(bound_hook_url, bound_user, bound_content);

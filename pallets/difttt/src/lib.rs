@@ -516,8 +516,8 @@ pub mod pallet {
 
 			let mut map_running_action_recipe_task: BTreeMap<u64, Recipe> = BTreeMap::new();
 			if let Ok(_guard) = lock.try_lock() {
-				Self::filter_running_recipe(&mut map_recipe_task);
-				Self::check_triger_recipe(
+				let _rt = Self::filter_running_recipe(&mut map_recipe_task);
+				let _rt = Self::check_triger_recipe(
 					&mut map_recipe_task,
 					&mut map_running_action_recipe_task,
 					timestamp_now,
@@ -525,7 +525,8 @@ pub mod pallet {
 				store_hashmap_recipe.set(&map_recipe_task);
 			};
 
-			Self::run_action(&mut map_running_action_recipe_task, block_number, timestamp_now);
+			let _rt =
+				Self::run_action(&mut map_running_action_recipe_task, block_number, timestamp_now);
 		}
 	}
 
@@ -557,7 +558,7 @@ pub mod pallet {
 					let signature_valid =
 						SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
 					if !signature_valid {
-						return InvalidTransaction::BadProof.into();
+						return InvalidTransaction::BadProof.into()
 					}
 
 					valid_tx(b"submit_recipe_done_with_signed_payload".to_vec())
@@ -569,7 +570,7 @@ pub mod pallet {
 					let signature_valid =
 						SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
 					if !signature_valid {
-						return InvalidTransaction::BadProof.into();
+						return InvalidTransaction::BadProof.into()
 					}
 
 					valid_tx(b"submit_recipe_triger_times_with_signed_payload".to_vec())
@@ -620,8 +621,8 @@ pub mod pallet {
 
 				match triger {
 					Some(Triger::Timer(insert_time, timer_millis_seconds)) => {
-						if insert_time + recipe.times * timer_millis_seconds
-							< timestamp_now.unix_millis()
+						if insert_time + recipe.times * timer_millis_seconds <
+							timestamp_now.unix_millis()
 						{
 							(*recipe).times += 1;
 							log::info!(
@@ -662,7 +663,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode url error  {:?}", e);
-								continue;
+								continue
 							},
 						};
 
@@ -671,7 +672,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode token error  {:?}", e);
-									continue;
+									continue
 								},
 							};
 
@@ -681,7 +682,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode revicer error  {:?}", e);
-								continue;
+								continue
 							},
 						};
 
@@ -690,7 +691,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode title error  {:?}", e);
-									continue;
+									continue
 								},
 							};
 
@@ -699,7 +700,7 @@ pub mod pallet {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode body error  {:?}", e);
-									continue;
+									continue
 								},
 							};
 
@@ -721,14 +722,14 @@ pub mod pallet {
 						) {
 							Ok(_i) => {
 								log::info!("###### publish_task mail ok");
-								Self::update_recipe_times(
+								let _rt = Self::update_recipe_times(
 									block_number,
 									*recipe_id,
 									recipe.times,
 									timestamp_now.unix_millis(),
 								);
 								if !recipe.is_forever && recipe.times >= recipe.max_times {
-									Self::set_recipe_done(block_number, *recipe_id);
+									let _rt = Self::set_recipe_done(block_number, *recipe_id);
 								}
 							},
 
@@ -738,43 +739,43 @@ pub mod pallet {
 						};
 					},
 					Some(Action::MailByLocalServer(revicer, title, body)) => {
-						let revicer = match scale_info::prelude::string::String::from_utf8(
+						let _revicer = match scale_info::prelude::string::String::from_utf8(
 							revicer.to_vec(),
 						) {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode revicer error  {:?}", e);
-								continue;
+								continue
 							},
 						};
 
-						let title =
+						let _title =
 							match scale_info::prelude::string::String::from_utf8(title.to_vec()) {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode title error  {:?}", e);
-									continue;
+									continue
 								},
 							};
 
-						let body =
+						let _body =
 							match scale_info::prelude::string::String::from_utf8(body.to_vec()) {
 								Ok(v) => v,
 								Err(e) => {
 									log::info!("###### decode body error  {:?}", e);
-									continue;
+									continue
 								},
 							};
 
 						//todo send mail by local docker server url.
-						Self::update_recipe_times(
+						let _rt = Self::update_recipe_times(
 							block_number,
 							*recipe_id,
 							recipe.times,
 							timestamp_now.unix_millis(),
 						);
 						if !recipe.is_forever && recipe.times >= recipe.max_times {
-							Self::set_recipe_done(block_number, *recipe_id);
+							let _rt = Self::set_recipe_done(block_number, *recipe_id);
 						}
 					},
 					Some(Action::Slack(url, message)) => {
@@ -783,7 +784,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode url error  {:?}", e);
-								continue;
+								continue
 							},
 						};
 
@@ -793,7 +794,7 @@ pub mod pallet {
 							Ok(v) => v,
 							Err(e) => {
 								log::info!("###### decode message error  {:?}", e);
-								continue;
+								continue
 							},
 						};
 
@@ -813,14 +814,14 @@ pub mod pallet {
 							Ok(_) => {
 								log::info!("###### publish_task slack ok");
 
-								Self::update_recipe_times(
+								let _rt = Self::update_recipe_times(
 									block_number,
 									*recipe_id,
 									recipe.times,
 									timestamp_now.unix_millis(),
 								);
 								if !recipe.is_forever && recipe.times >= recipe.max_times {
-									Self::set_recipe_done(block_number, *recipe_id);
+									let _rt = Self::set_recipe_done(block_number, *recipe_id);
 								}
 							},
 							Err(e) => {
@@ -845,10 +846,10 @@ pub mod pallet {
 			let options = BASE64.encode(options.as_bytes());
 
 			//let url = "https://reqbin.com/echo/post/json";
-			let url = "http://127.0.0.1:8000/".to_owned()
-				+ &dockr_url.to_owned()
-				+ "/" + &options.to_owned()
-				+ "/" + &max_run_num.to_string();
+			let url = "http://127.0.0.1:8000/".to_owned() +
+				&dockr_url.to_owned() +
+				"/" + &options.to_owned() +
+				"/" + &max_run_num.to_string();
 
 			let request = http::Request::get(&url).add_header("content-type", "application/json");
 
@@ -864,7 +865,7 @@ pub mod pallet {
 
 			if response.code != 200 {
 				log::info!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown);
+				return Err(http::Error::Unknown)
 			}
 
 			let body = response.body().collect::<Vec<u8>>();
@@ -877,7 +878,7 @@ pub mod pallet {
 
 			if "ok" != body_str {
 				log::info!("publish task fail: {}", body_str);
-				return Err(http::Error::Unknown);
+				return Err(http::Error::Unknown)
 			}
 
 			Ok(0)

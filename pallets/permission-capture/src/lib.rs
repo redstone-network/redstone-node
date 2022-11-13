@@ -2,20 +2,17 @@
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-	traits::{Currency, Get, ReservableCurrency, WrapperKeepOpaque},
-	weights::{GetDispatchInfo, PostDispatchInfo, Weight},
+	traits::{Currency, Get, WrapperKeepOpaque},
+	weights::{GetDispatchInfo, PostDispatchInfo},
 	BoundedVec, RuntimeDebug,
 };
-use frame_system::{self as system, RawOrigin};
+use frame_system::RawOrigin;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 use scale_info::TypeInfo;
-use sp_runtime::{
-	traits::{Dispatchable, One, TrailingZeroInput, Zero},
-	DispatchError,
-};
+use sp_runtime::traits::{Dispatchable, One};
 
 #[cfg(test)]
 mod mock;
@@ -97,19 +94,12 @@ pub struct ActiveCall<Friends, OpaqueCall, AccountId, Balance> {
 
 type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
 
-type CallHash = [u8; 32];
-
-enum CallOrHash<T: Config> {
-	Call(OpaqueCall<T>, bool),
-	Hash([u8; 32]),
-}
-
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 	use frame_support::{pallet_prelude::*, traits::ReservableCurrency};
 	use frame_system::pallet_prelude::*;
-	use sp_std::{boxed::Box, vec::Vec};
+	use sp_std::vec::Vec;
 
 	pub use primitives::permission_capture::PermissionCaptureInterface;
 
@@ -271,7 +261,6 @@ pub mod pallet {
 			account: T::AccountId, //capture owner
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let multisig_account = account.clone();
 
 			let capture_config =
 				Self::capture_config(&account).ok_or(Error::<T>::NotCaptureable)?;
@@ -459,7 +448,8 @@ pub mod pallet {
 
 					if let Some(call) = active_call.info.0.try_decode() {
 						if capture_config.threshold as usize <= active_call.approvals.len() {
-							let result = call.dispatch(RawOrigin::Signed(account.clone()).into());
+							call.dispatch(RawOrigin::Signed(account.clone()).into())
+								.map_err(|x| x.error)?;
 							Self::clear_call(account.clone(), &hash);
 						}
 					}
