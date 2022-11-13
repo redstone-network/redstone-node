@@ -27,11 +27,11 @@ use sp_std::cmp::{Eq, PartialEq};
 use frame_system::offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer};
 use sp_core::crypto::KeyTypeId;
 
-type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
+pub type OpaqueCall<T> = WrapperKeepOpaque<<T as Config>::Call>;
 
-type CallHash = [u8; 32];
+pub type CallHash = [u8; 32];
 
-enum CallOrHash<T: Config> {
+pub enum CallOrHash<T: Config> {
 	Call(OpaqueCall<T>, bool),
 	Hash([u8; 32]),
 }
@@ -95,7 +95,9 @@ pub mod pallet {
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 	use data_encoding::BASE64;
 	use frame_support::inherent::Vec;
-	use primitives::permission_capture::PermissionCaptureInterface;
+	use primitives::{
+		custom_call::CustomCallInterface, permission_capture::PermissionCaptureInterface,
+	};
 	use sp_io::hashing::blake2_256;
 
 	#[pallet::pallet]
@@ -120,6 +122,8 @@ pub mod pallet {
 			+ Dispatchable<Origin = Self::Origin, PostInfo = PostDispatchInfo>
 			+ GetDispatchInfo
 			+ From<frame_system::Call<Self>>;
+
+		type CustomCallInterface: CustomCallInterface<Self::AccountId, BalanceOf<Self>>;
 	}
 
 	/// store transfer limit
@@ -500,10 +504,12 @@ pub mod pallet {
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 
 			if T::PermissionCaptureInterface::is_account_permission_taken(who.clone()) {
-				let call = Call::<T>::safe_transfer { to: to.clone(), value };
-				let data = call.encode();
+				let data = T::CustomCallInterface::call_transfer(to.clone(), value);
+
 				let call_wrapper = OpaqueCall::<T>::from_encoded(data.clone());
-				let call_hash = blake2_256(call_wrapper.encoded());
+				let call_hash = blake2_256(&data);
+
+				let t: <T as pallet::Config>::Call = call_wrapper.try_decode().unwrap();
 
 				if T::PermissionCaptureInterface::has_account_pedding_call(who.clone()) {
 					if T::PermissionCaptureInterface::is_the_same_hash(who.clone(), call_hash) {
