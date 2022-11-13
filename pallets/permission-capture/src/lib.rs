@@ -459,9 +459,8 @@ pub mod pallet {
 
 					if let Some(call) = active_call.info.0.try_decode() {
 						if capture_config.threshold as usize <= active_call.approvals.len() {
-							Self::clear_call(account.clone(), &hash);
-
 							let result = call.dispatch(RawOrigin::Signed(account.clone()).into());
+							Self::clear_call(account.clone(), &hash);
 						}
 					}
 				},

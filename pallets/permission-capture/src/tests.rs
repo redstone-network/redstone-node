@@ -5,6 +5,7 @@ use sp_core::{
 	offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
 	sr25519::{Public, Signature},
 };
+use sp_io::hashing::blake2_256;
 use std::sync::Arc;
 
 #[test]
@@ -426,10 +427,124 @@ fn it_works_for_operational_voting_pass() {
 		assert_ok!(PermissionCaptureModule::vote(Origin::signed(Public::from_raw([2; 32])), 0, 0));
 
 		assert_eq!(MapPermissionTaken::<Test>::get(Public::from_raw([0; 32])), Some(()));
+
+		assert_ok!(DefenseModule::safe_transfer(
+			Origin::signed(Public::from_raw([0; 32])),
+			Public::from_raw([5; 32]),
+			10
+		));
+
+		let call = call_transfer(Public::from_raw([5; 32]), 10);
+		let data = call.encode();
+		let call_wrapper = OpaqueCall::<Test>::from_encoded(data.clone());
+		let hash = blake2_256(&data);
+
+		assert_eq!(OwnerCalls::<Test>::get(Public::from_raw([0; 32])), Some(hash));
+		assert_eq!(
+			ActiveCalls::<Test>::get(Public::from_raw([0; 32]), hash),
+			Some(ActiveCall {
+				approvals: FriendsOf::<Test>::default(),
+				denys: FriendsOf::<Test>::default(),
+				info: (call_wrapper, Public::from_raw([0; 32]), Default::default(),),
+			},)
+		);
+
+		assert_eq!(Balances::free_balance(Public::from_raw([0; 32])), 100);
+		assert_eq!(Balances::free_balance(Public::from_raw([5; 32])), 0);
+
+		//vote
+		assert_ok!(PermissionCaptureModule::operational_voting(
+			Origin::signed(Public::from_raw([1; 32])),
+			Public::from_raw([0; 32]),
+			hash,
+			0
+		));
+		assert_ok!(PermissionCaptureModule::operational_voting(
+			Origin::signed(Public::from_raw([2; 32])),
+			Public::from_raw([0; 32]),
+			hash,
+			0
+		));
+
+		assert_eq!(Balances::free_balance(Public::from_raw([0; 32])), 100 - 10);
+		assert_eq!(Balances::free_balance(Public::from_raw([5; 32])), 10);
+
+		assert_eq!(OwnerCalls::<Test>::get(Public::from_raw([0; 32])), None);
+		assert_eq!(ActiveCalls::<Test>::get(Public::from_raw([0; 32]), hash), None);
 	});
 }
 
 #[test]
 fn it_works_for_operational_voting_cancel() {
-	new_test_ext().execute_with(|| {});
+	new_test_ext().execute_with(|| {
+		assert_ok!(PermissionCaptureModule::create_capture_config(
+			Origin::signed(Public::from_raw([0; 32])),
+			vec![Public::from_raw([1; 32]), Public::from_raw([2; 32]), Public::from_raw([3; 32])],
+			2
+		));
+
+		assert_ok!(PermissionCaptureModule::create_get_account_permissions(
+			Origin::signed(Public::from_raw([1; 32])),
+			Public::from_raw([0; 32])
+		));
+
+		assert_noop!(
+			PermissionCaptureModule::vote(Origin::signed(Public::from_raw([5; 32])), 0, 0),
+			Error::<Test>::MustVoteByFriends
+		);
+
+		assert_eq!(MapPermissionTaken::<Test>::get(Public::from_raw([0; 32])), None);
+
+		// first vote
+		assert_ok!(PermissionCaptureModule::vote(Origin::signed(Public::from_raw([1; 32])), 0, 0));
+		// second votes
+		assert_ok!(PermissionCaptureModule::vote(Origin::signed(Public::from_raw([2; 32])), 0, 0));
+
+		assert_eq!(MapPermissionTaken::<Test>::get(Public::from_raw([0; 32])), Some(()));
+
+		assert_ok!(DefenseModule::safe_transfer(
+			Origin::signed(Public::from_raw([0; 32])),
+			Public::from_raw([5; 32]),
+			10
+		));
+
+		let call = call_transfer(Public::from_raw([5; 32]), 10);
+		let data = call.encode();
+		let call_wrapper = OpaqueCall::<Test>::from_encoded(data.clone());
+		let hash = blake2_256(&data);
+
+		assert_eq!(OwnerCalls::<Test>::get(Public::from_raw([0; 32])), Some(hash));
+		assert_eq!(
+			ActiveCalls::<Test>::get(Public::from_raw([0; 32]), hash),
+			Some(ActiveCall {
+				approvals: FriendsOf::<Test>::default(),
+				denys: FriendsOf::<Test>::default(),
+				info: (call_wrapper, Public::from_raw([0; 32]), Default::default(),),
+			},)
+		);
+
+		assert_eq!(Balances::free_balance(Public::from_raw([0; 32])), 100);
+		assert_eq!(Balances::free_balance(Public::from_raw([5; 32])), 0);
+
+		//vote
+		assert_ok!(PermissionCaptureModule::operational_voting(
+			Origin::signed(Public::from_raw([1; 32])),
+			Public::from_raw([0; 32]),
+			hash,
+			1
+		));
+		assert_ok!(PermissionCaptureModule::operational_voting(
+			Origin::signed(Public::from_raw([2; 32])),
+			Public::from_raw([0; 32]),
+			hash,
+			1
+		));
+
+		assert_eq!(Balances::free_balance(Public::from_raw([0; 32])), 100);
+		assert_eq!(Balances::free_balance(Public::from_raw([5; 32])), 0);
+
+		assert_eq!(OwnerCalls::<Test>::get(Public::from_raw([0; 32])), None);
+		assert_eq!(ActiveCalls::<Test>::get(Public::from_raw([0; 32]), hash), None);
+
+	});
 }

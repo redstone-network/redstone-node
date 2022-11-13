@@ -1,4 +1,5 @@
 use crate as pallet_permission_capture;
+use codec::Encode;
 use frame_support::{
 	parameter_types,
 	traits::{ConstU16, ConstU64},
@@ -6,7 +7,11 @@ use frame_support::{
 use frame_system as system;
 use pallet_defense::{Call as DefenseCall, Error as DefenseError};
 use pallet_difttt::crypto::TestAuthId;
-use sp_core::{sr25519::Signature, H256};
+use primitives::custom_call::CustomCallInterface;
+use sp_core::{
+	sr25519::{Public, Signature},
+	H256,
+};
 use sp_runtime::{
 	testing::{Header, TestXt},
 	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
@@ -73,12 +78,21 @@ impl pallet_balances::Config for Test {
 	type WeightInfo = ();
 }
 
+pub struct CustomCall;
+impl CustomCallInterface<AccountId, u128> for CustomCall {
+	fn call_transfer(to: AccountId, value: u128) -> Vec<u8> {
+		let call = Call::DefenseModule(DefenseCall::safe_transfer { to, value });
+		call.encode()
+	}
+}
+
 impl pallet_defense::Config for Test {
 	type Event = Event;
 	type Call = Call;
 	type Currency = Balances;
 	type AuthorityId = TestAuthId;
 	type PermissionCaptureInterface = PermissionCaptureModule;
+	type CustomCallInterface = CustomCall;
 }
 
 parameter_types! {
@@ -124,9 +138,23 @@ where
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![
+			(Public::from_raw([0; 32]), 100),
+			(Public::from_raw([1; 32]), 100),
+			(Public::from_raw([2; 32]), 100),
+			(Public::from_raw([3; 32]), 100),
+			(Public::from_raw([4; 32]), 100),
+		],
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
+	let mut ext = sp_io::TestExternalities::new(t);
+	ext.execute_with(|| System::set_block_number(1));
+	ext
 }
 
-fn call_transfer(to: sp_core::sr25519::Public, value: u128) -> Call {
+pub fn call_transfer(to: sp_core::sr25519::Public, value: u128) -> Call {
 	Call::DefenseModule(DefenseCall::safe_transfer { to, value })
 }
