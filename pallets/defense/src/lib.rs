@@ -220,26 +220,30 @@ pub mod pallet {
 						let mut transfer_amount_limit_set = false;
 
 						for i in 0..transfer_limit_id {
-							log::info!("{:?}", MapTransferLimit::<T>::get(i));
-							if let Some((_, TransferLimit::AmountLimit(_set_time, _set_amount))) =
-								MapTransferLimit::<T>::get(i)
-							{
-								log::info!(
-									"--------------------------------update transfer amount"
-								);
-								MapTransferLimit::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										transfer_limit.clone(),
-									))
-								});
-								log::info!("change transfer amount limit successfully");
-								transfer_amount_limit_set = true;
-								Self::deposit_event(Event::TransferAmountLimitUpdated(
-									who.clone(),
-									transfer_limit,
-								));
-								break;
+							if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
+								log::info!("{:?}", MapTransferLimit::<T>::get(i));
+								if let Some((
+									_,
+									TransferLimit::AmountLimit(_set_time, _set_amount),
+								)) = MapTransferLimit::<T>::get(i)
+								{
+									log::info!(
+										"--------------------------------update transfer amount"
+									);
+									MapTransferLimit::<T>::mutate(&i, |v| {
+										*v = Some((
+											frame_system::Pallet::<T>::block_number(),
+											transfer_limit.clone(),
+										))
+									});
+									log::info!("change transfer amount limit successfully");
+									transfer_amount_limit_set = true;
+									Self::deposit_event(Event::TransferAmountLimitUpdated(
+										who.clone(),
+										transfer_limit,
+									));
+									break;
+								}
 							}
 						}
 
@@ -265,24 +269,28 @@ pub mod pallet {
 						let mut transfer_times_limit_set = false;
 
 						for i in 0..transfer_limit_id {
-							log::info!("{:?}", MapTransferLimit::<T>::get(i));
-							if let Some((_, TransferLimit::TimesLimit(_set_time, _set_times))) =
-								MapTransferLimit::<T>::get(i)
-							{
-								log::info!("--------------------------------update transfer times");
-								MapTransferLimit::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										transfer_limit.clone(),
-									))
-								});
-								log::info!("change transfer times limit successfully");
-								transfer_times_limit_set = true;
-								Self::deposit_event(Event::TransferTimesLimitUpdated(
-									who.clone(),
-									transfer_limit,
-								));
-								break;
+							if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
+								log::info!("{:?}", MapTransferLimit::<T>::get(i));
+								if let Some((_, TransferLimit::TimesLimit(_set_time, _set_times))) =
+									MapTransferLimit::<T>::get(i)
+								{
+									log::info!(
+										"--------------------------------update transfer times"
+									);
+									MapTransferLimit::<T>::mutate(&i, |v| {
+										*v = Some((
+											frame_system::Pallet::<T>::block_number(),
+											transfer_limit.clone(),
+										))
+									});
+									log::info!("change transfer times limit successfully");
+									transfer_times_limit_set = true;
+									Self::deposit_event(Event::TransferTimesLimitUpdated(
+										who.clone(),
+										transfer_limit,
+									));
+									break;
+								}
 							}
 						}
 
@@ -350,14 +358,16 @@ pub mod pallet {
 				match risk_management {
 					RiskManagement::TimeFreeze(_, _) => {
 						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::TimeFreeze(_, _))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								freeze_time_set = true;
-								ensure!(
-									!MapRiskManagement::<T>::contains_key(&i),
-									Error::<T>::FreezeTimeHasSet
-								);
+							if RiskManagementOwner::<T>::contains_key(&who, &i) == true {
+								if let Some((_, RiskManagement::TimeFreeze(_, _))) =
+									MapRiskManagement::<T>::get(&i)
+								{
+									freeze_time_set = true;
+									ensure!(
+										!MapRiskManagement::<T>::contains_key(&i),
+										Error::<T>::FreezeTimeHasSet
+									);
+								}
 							}
 						}
 						if freeze_time_set == false {
@@ -381,14 +391,16 @@ pub mod pallet {
 					},
 					RiskManagement::AccountFreeze(_) => {
 						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::AccountFreeze(_))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								freeze_account_set = true;
-								ensure!(
-									!MapRiskManagement::<T>::contains_key(&i),
-									Error::<T>::FreezeAccountHasSet
-								);
+							if RiskManagementOwner::<T>::contains_key(&who, &i) == true {
+								if let Some((_, RiskManagement::AccountFreeze(_))) =
+									MapRiskManagement::<T>::get(&i)
+								{
+									freeze_account_set = true;
+									ensure!(
+										!MapRiskManagement::<T>::contains_key(&i),
+										Error::<T>::FreezeAccountHasSet
+									);
+								}
 							}
 						}
 						if freeze_account_set == false {
@@ -445,38 +457,43 @@ pub mod pallet {
 								let now = frame_system::Pallet::<T>::block_number();
 								if now - 100u32.into() < block_number {
 									if times <= 0 {
-										for i in 0..risk_management_id {
-											if let Some((
-												_,
-												RiskManagement::AccountFreeze(freeze),
-											)) = MapRiskManagement::<T>::get(&i)
-											{
-												if freeze == true {
-													BlockAccount::<T>::put(true);
-													set_freeze_account = true;
-													log::info!(
-														"--------------------------------freeze account forever"
-													);
-
-													break;
-												}
-											}
-										}
-										if set_freeze_account == false {
-											for i in 0..risk_management_id {
+										for j in 0..risk_management_id {
+											if RiskManagementOwner::<T>::contains_key(&who, &j) {
 												if let Some((
-													_block_number,
-													RiskManagement::TimeFreeze(_, _freeze_time),
-												)) = MapRiskManagement::<T>::get(&i)
+													_,
+													RiskManagement::AccountFreeze(freeze),
+												)) = MapRiskManagement::<T>::get(&j)
 												{
-													BlockTime::<T>::put(true);
-													break;
+													if freeze == true {
+														BlockAccount::<T>::put(true);
+														set_freeze_account = true;
+														log::info!(
+															"--------------------------------freeze account forever"
+														);
+
+														break;
+													}
+												}
+												if set_freeze_account == false {
+													for i in 0..risk_management_id {
+														if let Some((
+															_block_number,
+															RiskManagement::TimeFreeze(
+																_,
+																_freeze_time,
+															),
+														)) = MapRiskManagement::<T>::get(&i)
+														{
+															BlockTime::<T>::put(true);
+															break;
+														}
+													}
 												}
 											}
 										}
 
 										match T::Notification::get_mail_config_action(who.clone()) {
-											Some(_) => {
+											Some(Action::MailWithToken(..)) => {
 												log::info!("-------------------------------- mail with token status is none,set mail status true");
 												MailStatus::<T>::insert(who.clone(), true);
 												MapNotifyAccount::<T>::insert(
@@ -488,7 +505,9 @@ pub mod pallet {
 														.saturating_add(One::one()),
 												);
 											},
-											_ => {},
+											_ => {
+												log::info!("--------------------------------没有获取到邮箱信息");
+											},
 										}
 										match T::Notification::get_slack_config_action(who.clone())
 										{
@@ -504,7 +523,9 @@ pub mod pallet {
 														.saturating_add(One::one()),
 												);
 											},
-											_ => {},
+											_ => {
+												log::info!("--------------------------------没有获取到Slack信息");
+											},
 										}
 										match T::Notification::get_discord_config_action(
 											who.clone(),
@@ -521,7 +542,9 @@ pub mod pallet {
 														.saturating_add(One::one()),
 												);
 											},
-											_ => {},
+											_ => {
+												log::info!("--------------------------------没有获取到discord信息");
+											},
 										}
 
 										ensure!(times > 0, Error::<T>::TransferTimesTooMany);
@@ -537,24 +560,43 @@ pub mod pallet {
 								TransferLimit::AmountLimit(_start_time, amount),
 							)) => {
 								if value > amount {
-									for i in 0..risk_management_id {
-										if let Some((_, RiskManagement::AccountFreeze(freeze))) =
-											MapRiskManagement::<T>::get(&i)
-										{
-											if freeze == true {
-												BlockAccount::<T>::put(true);
-												set_freeze_account = true;
+									for j in 0..risk_management_id {
+										if RiskManagementOwner::<T>::contains_key(&who, &j) {
+											if let Some((
+												_,
+												RiskManagement::AccountFreeze(freeze),
+											)) = MapRiskManagement::<T>::get(&j)
+											{
+												if freeze == true {
+													BlockAccount::<T>::put(true);
+													set_freeze_account = true;
 
-												log::info!(
+													log::info!(
 													"--------------------------------freeze account forever"
 												);
-												break;
+													break;
+												}
+											}
+
+											if set_freeze_account == false {
+												if let Some((
+													_block_number,
+													RiskManagement::TimeFreeze(_, _freeze_time),
+												)) = MapRiskManagement::<T>::get(&j)
+												{
+													BlockTime::<T>::put(true);
+
+													log::info!(
+															"--------------------------------freeze account temporary "
+														);
+													break;
+												}
 											}
 										}
 									}
 
 									match T::Notification::get_mail_config_action(who.clone()) {
-										Some(_) => {
+										Some(Action::MailWithToken(..)) => {
 											log::info!("-------------------------------- mail with token status is none,set mail status true");
 											MailStatus::<T>::insert(who.clone(), true);
 											MapNotifyAccount::<T>::insert(
@@ -566,7 +608,9 @@ pub mod pallet {
 													.saturating_add(One::one()),
 											);
 										},
-										_ => {},
+										_ => {
+											log::info!("--------------------------------没有获取到邮箱信息");
+										},
 									}
 									match T::Notification::get_slack_config_action(who.clone()) {
 										Some(_) => {
@@ -599,25 +643,10 @@ pub mod pallet {
 										_ => {},
 									}
 
-									if set_freeze_account == false {
-										for i in 0..risk_management_id {
-											if let Some((
-												_block_number,
-												RiskManagement::TimeFreeze(_, _freeze_time),
-											)) = MapRiskManagement::<T>::get(&i)
-											{
-												BlockTime::<T>::put(true);
-
-												log::info!(
-													"--------------------------------freeze account temporary "
-												);
-												break;
-											}
-										}
-									}
 									ensure!(amount > value, Error::<T>::TransferValueTooLarge);
+								} else {
+									satisfy_amount_limit = true;
 								}
-								satisfy_amount_limit = true;
 							},
 							_ => {
 								log::info!(
@@ -702,25 +731,36 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			account: T::AccountId,
 		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
+			let _who = ensure_signed(origin)?;
 
 			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					MailStatus::<T>::insert(account.clone(), false);
+					MailStatus::<T>::mutate(account.clone(), |v| *v = Some(false));
 					log::info!("-------------------------------- deactivate email notification");
 				}
 			}
 			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					DiscordStatus::<T>::insert(account.clone(), false);
+					DiscordStatus::<T>::mutate(account.clone(), |v| *v = Some(false));
 					log::info!("-------------------------------- deactivate discord notification");
 				}
 			}
 
 			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					SlackStatus::<T>::insert(account.clone(), false);
+					SlackStatus::<T>::mutate(account.clone(), |v| *v = Some(false));
 					log::info!("-------------------------------- deactivate slack notification");
+				}
+			}
+
+			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
+
+			for index in 0..next_notify_account_index {
+				if let Some(val) = MapNotifyAccount::<T>::get(index) {
+					if val == account {
+						MapNotifyAccount::<T>::remove(index);
+						log::info!("-------------------------------- remove the account which has been notified");
+					}
 				}
 			}
 
@@ -1010,7 +1050,6 @@ pub mod pallet {
 			}
 			Ok(0)
 		}
-
 		fn send_signed_tx(account: T::AccountId) -> Result<(), &'static str> {
 			let signer = Signer::<T, T::AuthorityId>::all_accounts();
 			if !signer.can_sign() {

@@ -71,7 +71,6 @@ impl pallet_defense::Config for Test {
 	type Event = Event;
 	type Currency = Balances;
 	type AuthorityId = pallet_defense::crypto::TestAuthId;
-	
 }
 
 // Build genesis storage according to the mock runtime.
