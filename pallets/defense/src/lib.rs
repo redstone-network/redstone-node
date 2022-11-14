@@ -103,14 +103,28 @@ pub mod pallet {
 	/// storage transfer limit owner
 	#[pallet::storage]
 	#[pallet::getter(fn transfer_limit_owner)]
-	pub type TransferLimitOwner<T: Config> =
-		StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, u64, (), OptionQuery>;
+	pub type TransferLimitOwner<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		T::AccountId,
+		Twox64Concat,
+		u64,
+		TransferLimit<BalanceOf<T>>,
+		OptionQuery,
+	>;
 
 	/// store risk management owner
 	#[pallet::storage]
 	#[pallet::getter(fn risk_management_owner)]
-	pub type RiskManagementOwner<T: Config> =
-		StorageDoubleMap<_, Twox64Concat, T::AccountId, Twox64Concat, u64, (), OptionQuery>;
+	pub type RiskManagementOwner<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		T::AccountId,
+		Twox64Concat,
+		u64,
+		RiskManagement,
+		OptionQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn next_transfer_limit_id)]
@@ -241,7 +255,7 @@ pub mod pallet {
 					transfer_limit_id,
 					(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
 				);
-				TransferLimitOwner::<T>::insert(&who, transfer_limit_id, ());
+				TransferLimitOwner::<T>::insert(&who, transfer_limit_id, transfer_limit.clone());
 				NextTransferLimitId::<T>::put(transfer_limit_id.saturating_add(One::one()));
 
 				match transfer_limit {
@@ -314,7 +328,7 @@ pub mod pallet {
 					risk_management_id,
 					(frame_system::Pallet::<T>::block_number(), risk_management.clone()),
 				);
-				RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
+				RiskManagementOwner::<T>::insert(&who, risk_management_id, risk_management.clone());
 				NextRiskManagementId::<T>::put(risk_management_id.saturating_add(One::one()));
 
 				match risk_management {
