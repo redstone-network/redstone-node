@@ -12,10 +12,12 @@ mod tests;
 mod benchmarking;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-	traits::{ConstU32, WrapperKeepOpaque},
+	traits::WrapperKeepOpaque,
 	weights::{GetDispatchInfo, PostDispatchInfo},
-	BoundedVec,
 };
+
+use pallet_difttt::Action;
+
 use scale_info::TypeInfo;
 use sp_runtime::{
 	offchain::{http, Duration},
@@ -69,11 +71,6 @@ pub enum TransferLimit<Balance> {
 pub enum RiskManagement {
 	TimeFreeze(u64, u64), // freeze duration
 	AccountFreeze(bool),
-	Mail(
-		BoundedVec<u8, ConstU32<256>>, // receiver
-		BoundedVec<u8, ConstU32<256>>, // title
-		BoundedVec<u8, ConstU32<256>>, // message body
-	),
 }
 
 #[frame_support::pallet]
@@ -88,12 +85,16 @@ pub mod pallet {
 	use sp_runtime::traits::{One, SaturatedConversion};
 	pub type BalanceOf<T> =
 		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+	use codec::alloc::string::ToString;
 	use data_encoding::BASE64;
 	use frame_support::inherent::Vec;
+
 	use primitives::{
 		custom_call::CustomCallInterface, permission_capture::PermissionCaptureInterface,
 	};
 	use sp_io::hashing::blake2_256;
+
+	use pallet_notification::NotificationInfoInterface;
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
@@ -119,6 +120,8 @@ pub mod pallet {
 			+ From<frame_system::Call<Self>>;
 
 		type CustomCallInterface: CustomCallInterface<Self::AccountId, BalanceOf<Self>>;
+
+		type Notification: NotificationInfoInterface<Self::AccountId, Action<Self::AccountId>>;
 	}
 
 	/// store transfer limit
@@ -155,15 +158,32 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn block_account)]
-	pub type BlockAccount<T> = StorageValue<_, bool>;
+	pub type BlockAccount<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn block_time)]
-	pub type BlockTime<T> = StorageValue<_, bool>;
+	pub type BlockTime<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn next_account_index)]
+	pub type NextNotifyAccountIndex<T: Config> = StorageValue<_, u64>;
+
+	/// store risk management
+	#[pallet::storage]
+	#[pallet::getter(fn notify_account_map)]
+	pub(super) type MapNotifyAccount<T: Config> = StorageMap<_, Twox64Concat, u64, T::AccountId>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn mail_status)]
-	pub type MailStatus<T> = StorageValue<_, bool>;
+	pub(super) type MailStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn slack_status)]
+	pub(super) type SlackStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn discord_status)]
+	pub(super) type DiscordStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -199,130 +219,83 @@ pub mod pallet {
 			transfer_limit: TransferLimit<BalanceOf<T>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-
 			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
 
-			log::info!("--------------transfer_limit_id: {}", transfer_limit_id);
+			let mut set_amount_limit = false;
+			let mut set_times_limit = false;
 
-			if transfer_limit_id == 0 {
+			for i in 0..transfer_limit_id {
+				if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
+					match transfer_limit {
+						TransferLimit::AmountLimit(_set_time, _amount) => {
+							if let Some((_, TransferLimit::AmountLimit(_set_time, _set_times))) =
+								MapTransferLimit::<T>::get(i)
+							{
+								MapTransferLimit::<T>::mutate(&i, |v| {
+									*v = Some((
+										frame_system::Pallet::<T>::block_number(),
+										transfer_limit.clone(),
+									))
+								});
+
+								Self::deposit_event(Event::TransferAmountLimitUpdated(
+									who.clone(),
+									transfer_limit,
+								));
+
+								set_amount_limit = true;
+								log::info!("--------------------------------update transfer amount limit successfully");
+
+								break
+							}
+						},
+						TransferLimit::TimesLimit(_set_time, _times) => {
+							if let Some((_, TransferLimit::TimesLimit(_set_time, _set_times))) =
+								MapTransferLimit::<T>::get(i)
+							{
+								MapTransferLimit::<T>::mutate(&i, |v| {
+									*v = Some((
+										frame_system::Pallet::<T>::block_number(),
+										transfer_limit.clone(),
+									))
+								});
+
+								Self::deposit_event(Event::TransferTimesLimitUpdated(
+									who.clone(),
+									transfer_limit,
+								));
+								set_times_limit = true;
+								log::info!("--------------------------------update transfer times limit successfully");
+
+								break
+							}
+						},
+					}
+				}
+			}
+
+			if set_times_limit == false && set_amount_limit == false {
+				MapTransferLimit::<T>::insert(
+					transfer_limit_id,
+					(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
+				);
+				TransferLimitOwner::<T>::insert(&who, transfer_limit_id, ());
+				NextTransferLimitId::<T>::put(transfer_limit_id.saturating_add(One::one()));
+
 				match transfer_limit {
-					TransferLimit::AmountLimit(_start_time, _amount) => {
-						MapTransferLimit::<T>::insert(
-							transfer_limit_id,
-							(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
-						);
-						TransferLimitOwner::<T>::insert(&who, transfer_limit_id, ());
-						NextTransferLimitId::<T>::put(transfer_limit_id.saturating_add(One::one()));
-						log::info!("--------------------------------set transfer amount");
-
+					TransferLimit::AmountLimit(_set_time, _amount) => {
+						log::info!("--------------------------------set transfer amount limit");
 						Self::deposit_event(Event::TransferAmountLimitSet(
 							who.clone(),
 							transfer_limit,
 						));
 					},
-					TransferLimit::TimesLimit(_start_time, _times) => {
-						MapTransferLimit::<T>::insert(
-							transfer_limit_id,
-							(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
-						);
-						TransferLimitOwner::<T>::insert(&who, transfer_limit_id, ());
-						NextTransferLimitId::<T>::put(transfer_limit_id.saturating_add(One::one()));
-
-						log::info!("--------------------------------set transfer times");
+					TransferLimit::TimesLimit(_set_time, _times) => {
+						log::info!("--------------------------------set transfer times limit");
 						Self::deposit_event(Event::TransferTimesLimitSet(
 							who.clone(),
 							transfer_limit,
 						));
-					},
-				}
-			} else {
-				match transfer_limit {
-					TransferLimit::AmountLimit(_, _) => {
-						let mut transfer_amount_limit_set = false;
-
-						for i in 0..transfer_limit_id {
-							log::info!("{:?}", MapTransferLimit::<T>::get(i));
-							if let Some((_, TransferLimit::AmountLimit(_set_time, _set_amount))) =
-								MapTransferLimit::<T>::get(i)
-							{
-								log::info!(
-									"--------------------------------update transfer amount"
-								);
-								MapTransferLimit::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										transfer_limit.clone(),
-									))
-								});
-								log::info!("change transfer amount limit successfully");
-								transfer_amount_limit_set = true;
-								Self::deposit_event(Event::TransferAmountLimitUpdated(
-									who.clone(),
-									transfer_limit,
-								));
-								break
-							}
-						}
-
-						if transfer_amount_limit_set == false {
-							log::info!("--------------------------------set transfer amount");
-							MapTransferLimit::<T>::insert(
-								transfer_limit_id,
-								(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
-							);
-							TransferLimitOwner::<T>::insert(&who, transfer_limit_id, ());
-							NextTransferLimitId::<T>::put(
-								transfer_limit_id.saturating_add(One::one()),
-							);
-
-							Self::deposit_event(Event::TransferAmountLimitSet(
-								who.clone(),
-								transfer_limit,
-							));
-						}
-					},
-
-					TransferLimit::TimesLimit(_, _) => {
-						let mut transfer_times_limit_set = false;
-
-						for i in 0..transfer_limit_id {
-							log::info!("{:?}", MapTransferLimit::<T>::get(i));
-							if let Some((_, TransferLimit::TimesLimit(_set_time, _set_times))) =
-								MapTransferLimit::<T>::get(i)
-							{
-								log::info!("--------------------------------update transfer times");
-								MapTransferLimit::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										transfer_limit.clone(),
-									))
-								});
-								log::info!("change transfer times limit successfully");
-								transfer_times_limit_set = true;
-								Self::deposit_event(Event::TransferTimesLimitUpdated(
-									who.clone(),
-									transfer_limit,
-								));
-								break
-							}
-						}
-
-						if transfer_times_limit_set == false {
-							log::info!("--------------------------------set transfer times");
-							MapTransferLimit::<T>::insert(
-								transfer_limit_id,
-								(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
-							);
-							TransferLimitOwner::<T>::insert(&who, transfer_limit_id, ());
-							NextTransferLimitId::<T>::put(
-								transfer_limit_id.saturating_add(One::one()),
-							);
-
-							Self::deposit_event(Event::TransferTimesLimitSet(
-								who.clone(),
-								transfer_limit,
-							));
-						}
 					},
 				}
 			}
@@ -338,9 +311,43 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 
-			log::info!("--------------risk_management_id: {}", risk_management_id);
+			let mut freeze_time_set = false;
+			let mut freeze_account_set = false;
 
-			if risk_management_id == 0 {
+			for i in 0..risk_management_id {
+				if RiskManagementOwner::<T>::contains_key(&who, &i) == true {
+					match risk_management {
+						RiskManagement::TimeFreeze(_, _) => {
+							if let Some((_, RiskManagement::TimeFreeze(_, _))) =
+								MapRiskManagement::<T>::get(&i)
+							{
+								freeze_time_set = true;
+								log::info!("--------------------------------freeze time has set");
+								ensure!(
+									!MapRiskManagement::<T>::contains_key(&i),
+									Error::<T>::FreezeTimeHasSet
+								);
+							}
+						},
+						RiskManagement::AccountFreeze(_) => {
+							if let Some((_, RiskManagement::AccountFreeze(_))) =
+								MapRiskManagement::<T>::get(&i)
+							{
+								freeze_account_set = true;
+								log::info!(
+									"--------------------------------freeze account has set"
+								);
+								ensure!(
+									!MapRiskManagement::<T>::contains_key(&i),
+									Error::<T>::FreezeAccountHasSet
+								);
+							}
+						},
+					}
+				}
+			}
+
+			if freeze_time_set == false && freeze_account_set == false {
 				MapRiskManagement::<T>::insert(
 					risk_management_id,
 					(frame_system::Pallet::<T>::block_number(), risk_management.clone()),
@@ -363,125 +370,6 @@ pub mod pallet {
 							risk_management.clone(),
 						));
 					},
-					RiskManagement::Mail(_, _, _) => {
-						log::info!("--------------------------------set notify mail");
-						Self::deposit_event(Event::RiskManagementMailSet(
-							who.clone(),
-							risk_management.clone(),
-						));
-					},
-				}
-			} else {
-				let mut freeze_time_set = false;
-				let mut freeze_account_set = false;
-				let mut notify_mail_set = false;
-
-				match risk_management {
-					RiskManagement::TimeFreeze(_, _) => {
-						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::TimeFreeze(_, _))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								freeze_time_set = true;
-								ensure!(
-									!MapRiskManagement::<T>::contains_key(&i),
-									Error::<T>::FreezeTimeHasSet
-								);
-							}
-						}
-						if freeze_time_set == false {
-							MapRiskManagement::<T>::insert(
-								risk_management_id,
-								(
-									frame_system::Pallet::<T>::block_number(),
-									risk_management.clone(),
-								),
-							);
-							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-							NextRiskManagementId::<T>::put(
-								risk_management_id.saturating_add(One::one()),
-							);
-
-							Self::deposit_event(Event::RiskManagementTimeFreezeSet(
-								who.clone(),
-								risk_management.clone(),
-							));
-						}
-					},
-					RiskManagement::AccountFreeze(_) => {
-						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::AccountFreeze(_))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								freeze_account_set = true;
-								ensure!(
-									!MapRiskManagement::<T>::contains_key(&i),
-									Error::<T>::FreezeAccountHasSet
-								);
-							}
-						}
-						if freeze_account_set == false {
-							MapRiskManagement::<T>::insert(
-								risk_management_id,
-								(
-									frame_system::Pallet::<T>::block_number(),
-									risk_management.clone(),
-								),
-							);
-							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-							NextRiskManagementId::<T>::put(
-								risk_management_id.saturating_add(One::one()),
-							);
-
-							Self::deposit_event(Event::RiskManagementAccountFreezeSet(
-								who.clone(),
-								risk_management.clone(),
-							));
-						}
-					},
-					RiskManagement::Mail(_, _, _) => {
-						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::Mail(_, _, _))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								notify_mail_set = true;
-
-								log::info!("--------------------------------update notify email");
-
-								// MapTransferLimit::<T>::insert(i, transfer_limit.clone());
-								MapRiskManagement::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										risk_management.clone(),
-									))
-								});
-								log::info!("change notify mail successfully");
-
-								Self::deposit_event(Event::RiskManagementMailUpdated(
-									who.clone(),
-									risk_management.clone(),
-								));
-							}
-						}
-						if notify_mail_set == false {
-							log::info!("--------------------------------set notify mail");
-							MapRiskManagement::<T>::insert(
-								risk_management_id,
-								(
-									frame_system::Pallet::<T>::block_number(),
-									risk_management.clone(),
-								),
-							);
-							RiskManagementOwner::<T>::insert(&who, risk_management_id, ());
-							NextRiskManagementId::<T>::put(
-								risk_management_id.saturating_add(One::one()),
-							);
-							Self::deposit_event(Event::RiskManagementMailSet(
-								who.clone(),
-								risk_management.clone(),
-							));
-						}
-					},
 				}
 			}
 
@@ -495,8 +383,12 @@ pub mod pallet {
 			value: BalanceOf<T>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
+
 			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
+			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
+
+			_ = Self::check_account_status(who.clone(), risk_management_id);
 
 			if T::PermissionCaptureInterface::is_account_permission_taken(who.clone()) {
 				let data = T::CustomCallInterface::call_transfer(to.clone(), value);
@@ -534,208 +426,82 @@ pub mod pallet {
 				let mut satisfy_times_limit = false;
 				let mut satisfy_amount_limit = false;
 
-				let mut set_freeze_account = false;
+				let mut transfer_limit_not_set = true;
 
 				for i in 0..transfer_limit_id {
-					match MapTransferLimit::<T>::get(&i) {
-						Some((block_number, TransferLimit::TimesLimit(_start_time, times))) => {
-							let now = frame_system::Pallet::<T>::block_number();
-							if now - 100u32.into() < block_number {
-								if times <= 0 {
-									for i in 0..risk_management_id {
-										if let Some((_, RiskManagement::AccountFreeze(freeze))) =
-											MapRiskManagement::<T>::get(&i)
-										{
-											if freeze == true {
-												BlockAccount::<T>::put(true);
-												set_freeze_account = true;
-												log::info!(
-													"--------------------------------freeze account forever"
-												);
-												break
-											}
-										}
+					if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
+						transfer_limit_not_set = false;
+
+						match MapTransferLimit::<T>::get(&i) {
+							Some((block_number, TransferLimit::TimesLimit(start_time, times))) => {
+								let now = frame_system::Pallet::<T>::block_number();
+
+								if now < block_number + 100u32.into() {
+									if times <= 0 {
+										Self::freeze_account(who.clone(), risk_management_id);
+
+										Self::set_notify_method(
+											who.clone(),
+											next_notify_account_index,
+										);
+
+										ensure!(times > 0, Error::<T>::TransferTimesTooMany);
+									} else {
+										MapTransferLimit::<T>::mutate(&i, |v| {
+											*v = Some((
+												block_number,
+												TransferLimit::TimesLimit(start_time, times - 1),
+											))
+										});
+
+										satisfy_times_limit = true;
 									}
-									if set_freeze_account == false {
-										for i in 0..risk_management_id {
-											if let Some((
-												_block_number,
-												RiskManagement::TimeFreeze(_, _freeze_time),
-											)) = MapRiskManagement::<T>::get(&i)
-											{
-												BlockTime::<T>::put(true);
-												for i in 0..risk_management_id {
-													if let Some((
-														_,
-														RiskManagement::Mail(_, _, _),
-													)) = MapRiskManagement::<T>::get(&i)
-													{
-														log::info!("--------------------------------set mail status true");
-														MailStatus::<T>::put(true);
-														break
-													}
-												}
-												log::info!(
-													"--------------------------------freeze account temporary "
-												);
-												break
-											}
-										}
-									}
-									for i in 0..risk_management_id {
-										if let Some((_, RiskManagement::Mail(_, _, _))) =
-											MapRiskManagement::<T>::get(&i)
-										{
-											match MailStatus::<T>::get() {
-												Some(val) =>
-													if val != true {
-														log::info!("-------------------------------- mail status true is false,set mail status true");
-														MailStatus::<T>::put(true);
-													},
-												None => {
-													log::info!("-------------------------------- mail status true is none,set mail status true");
-													MailStatus::<T>::put(true);
-												},
-											}
-											break
-										}
-									}
-									ensure!(times > 0, Error::<T>::TransferTimesTooMany);
 								} else {
 									satisfy_times_limit = true;
 								}
-							} else {
-								satisfy_times_limit = true;
-							}
-						},
-						Some((_block_number, TransferLimit::AmountLimit(_start_time, amount))) => {
-							if value > amount {
-								for i in 0..risk_management_id {
-									if let Some((_, RiskManagement::AccountFreeze(freeze))) =
-										MapRiskManagement::<T>::get(&i)
-									{
-										if freeze == true {
-											BlockAccount::<T>::put(true);
-											set_freeze_account = true;
+							},
+							Some((
+								_block_number,
+								TransferLimit::AmountLimit(_start_time, amount),
+							)) =>
+								if value > amount {
+									Self::freeze_account(who.clone(), risk_management_id);
 
-											log::info!(
-												"--------------------------------freeze account forever"
-											);
-											break
-										}
-									}
-								}
+									Self::set_notify_method(who.clone(), next_notify_account_index);
 
-								for i in 0..risk_management_id {
-									if let Some((_, RiskManagement::Mail(_, _, _))) =
-										MapRiskManagement::<T>::get(&i)
-									{
-										match MailStatus::<T>::get() {
-											Some(val) =>
-												if val != true {
-													log::info!("--------------------------------mail status true is false,set mail status true");
-
-													MailStatus::<T>::put(true);
-												},
-											None => {
-												log::info!("-------------------------------- mail status true is none,set mail status true");
-												MailStatus::<T>::put(true);
-											},
-										}
-										break
-									}
-								}
-
-								if set_freeze_account == false {
-									for i in 0..risk_management_id {
-										if let Some((
-											_block_number,
-											RiskManagement::TimeFreeze(_, _freeze_time),
-										)) = MapRiskManagement::<T>::get(&i)
-										{
-											BlockTime::<T>::put(true);
-
-											log::info!(
-												"--------------------------------freeze account temporary "
-											);
-											break
-										}
-									}
-								}
-								ensure!(amount > value, Error::<T>::TransferValueTooLarge);
-							}
-							satisfy_amount_limit = true;
-						},
-						_ => {
-							log::info!(
-								"--------------------------------not set any transfer limit"
-							);
-						},
+									ensure!(amount > value, Error::<T>::TransferValueTooLarge);
+								} else {
+									satisfy_amount_limit = true;
+								},
+							_ => {
+								log::info!(
+									"--------------------------------not set any transfer limit"
+								);
+							},
+						}
 					}
 				}
-				if satisfy_amount_limit == true || satisfy_times_limit == true {
-					match BlockAccount::<T>::get() {
-						Some(val) => {
-							log::info!(
-								"-------------------------------- account has been freezed forever"
-							);
+
+				if satisfy_amount_limit == true ||
+					satisfy_times_limit == true ||
+					transfer_limit_not_set == true
+				{
+					if let Some(val) = BlockAccount::<T>::get(who.clone()) {
+						if val == true {
+							log::info!("-------------------------------check block account again");
 							ensure!(!val, Error::<T>::AccountHasBeenFrozenForever);
-						},
-						None => {
-							log::info!("--------------------------------health account");
-						},
+						}
 					}
-					match BlockTime::<T>::get() {
-						Some(val) =>
-							if val == true {
-								for i in 0..risk_management_id {
-									if let Some((
-										block_number,
-										RiskManagement::TimeFreeze(_start_time, freeze_time),
-									)) = MapRiskManagement::<T>::get(&i)
-									{
-										let now = frame_system::Pallet::<T>::block_number();
-
-										if now.saturated_into::<u64>() - freeze_time % 6 >=
-											block_number.saturated_into::<u64>()
-										{
-											BlockAccount::<T>::put(false);
-
-											if let Some(val) = MailStatus::<T>::get() {
-												if val == true {
-													MailStatus::<T>::put(false);
-													log::info!(
-														"-------------------------------- reactivate email notification"
-													);
-												}
-											}
-
-											log::info!(
-												"--------------------------------unfreeze account"
-											)
-										} else {
-											ensure!(
-												!val,
-												Error::<T>::AccountHasBeenFrozenTemporary
-											);
-										}
-									}
-								}
-							} else {
-								log::info!("--------------------------------health amount")
-							},
-						None => {
-							log::info!("--------------------------------health amount")
-						},
+					if let Some(val) = BlockTime::<T>::get(who.clone()) {
+						if val == true {
+							log::info!("-------------------------------check block time again ");
+							ensure!(!val, Error::<T>::AccountHasBeenFrozenTemporary);
+						}
 					}
 
 					T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
 					Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
 					log::info!("-------------------------------transfer successfully");
-				} else {
-					log::info!(
-						"-------------------------------condition not satisfy,transfer failed!!!"
-					);
 				}
 			}
 
@@ -743,13 +509,40 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(0)]
-		pub fn reset_email_status(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+		pub fn reset_notification_status(
+			origin: OriginFor<T>,
+			account: T::AccountId,
+		) -> DispatchResultWithPostInfo {
 			let _who = ensure_signed(origin)?;
 
-			if let Some(val) = MailStatus::<T>::get() {
+			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					MailStatus::<T>::put(false);
-					log::info!("-------------------------------- reactivate email notification");
+					MailStatus::<T>::mutate(account.clone(), |v| *v = Some(false));
+					log::info!("-------------------------------- deactivate email notification");
+				}
+			}
+			if let Some(val) = MailStatus::<T>::get(account.clone()) {
+				if val == true {
+					DiscordStatus::<T>::mutate(account.clone(), |v| *v = Some(false));
+					log::info!("-------------------------------- deactivate discord notification");
+				}
+			}
+
+			if let Some(val) = MailStatus::<T>::get(account.clone()) {
+				if val == true {
+					SlackStatus::<T>::mutate(account.clone(), |v| *v = Some(false));
+					log::info!("-------------------------------- deactivate slack notification");
+				}
+			}
+
+			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
+
+			for index in 0..next_notify_account_index {
+				if let Some(val) = MapNotifyAccount::<T>::get(index) {
+					if val == account {
+						MapNotifyAccount::<T>::remove(index);
+						log::info!("-------------------------------- remove the account which has been notified");
+					}
 				}
 			}
 
@@ -761,121 +554,227 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
 			log::info!("Hi World from defense-pallet workers!: {:?}", block_number);
-			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
+			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
 
-			// 检查是否需要发送邮件
-			match MailStatus::<T>::get() {
-				Some(val) => {
-					if val == true {
-						for i in 0..risk_management_id {
-							if let Some((_, RiskManagement::Mail(receiver, title, message_body))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								log::info!("--------------------------------send email");
-
-								let to_email = match scale_info::prelude::string::String::from_utf8(
-									receiver.to_vec(),
-								) {
-									Ok(v) => v,
-									Err(e) => {
-										log::info!("------decode receiver error  {:?}", e);
-										continue
-									},
-								};
-
-								let subject = match scale_info::prelude::string::String::from_utf8(
-									title.to_vec(),
-								) {
-									Ok(v) => v,
-									Err(e) => {
-										log::info!("------decode subject error  {:?}", e);
-										continue
-									},
-								};
-
-								let content = match scale_info::prelude::string::String::from_utf8(
-									message_body.to_vec(),
-								) {
-									Ok(v) => v,
-									Err(e) => {
-										log::info!("------decode content error  {:?}", e);
-										continue
-									},
-								};
-
-								let basic_url = "http://127.0.0.1:3030/get?";
-
-								let email = BASE64.encode(to_email[..].as_bytes());
-								let subject = BASE64.encode(subject[..].as_bytes());
-								let content = BASE64.encode(content[..].as_bytes());
-
-								let url = &scale_info::prelude::format!(
-									"{}email={}&subject={}&content={}",
-									basic_url,
-									email,
-									subject,
-									content
-								)[..];
-
-								match Self::send_email_info(url) {
-									Ok(val) => {
-										log::info!("email send successfully {:?}", val);
-										match Self::send_signed_tx() {
-											Ok(_) => log::info!("reset email status as false"),
-											Err(e) => {
-												log::info!(
-													"reset email status as false failed {:?}",
-													e
-												);
-											},
-										};
-									},
-									Err(e) => log::info!("email send failed {:?}", e),
-								};
-							}
-						}
-					} else {
-						// log::info!("--------------------------------no need to send email");
-					}
-				},
-				None => {
-					// log::info!("--------------------------------no find email info");
-				},
+			for i in 0..next_notify_account_index {
+				match MapNotifyAccount::<T>::get(i) {
+					Some(account) => Self::check_notify_method_and_send_info(account.clone()),
+					_ => {},
+				}
 			}
 		}
 	}
+
 	impl<T: Config> Pallet<T> {
-		fn send_email_info(url: &str) -> Result<u64, http::Error> {
-			// prepare for send request
-			// log::info!("--------------request url {:?}", url);
-			let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+		fn send_email_info(account: T::AccountId) -> Result<u64, http::Error> {
+			match T::Notification::get_mail_config_action(account) {
+				Some(Action::MailWithToken(_, _, receiver, title, message_body)) => {
+					let to_email =
+						match scale_info::prelude::string::String::from_utf8(receiver.to_vec()) {
+							Ok(v) => v,
+							Err(e) => {
+								log::info!("------decode receiver error  {:?}", e);
+								"".to_string()
+							},
+						};
 
-			let request = http::Request::get(url);
+					let subject =
+						match scale_info::prelude::string::String::from_utf8(title.to_vec()) {
+							Ok(v) => v,
+							Err(e) => {
+								log::info!("------decode title error  {:?}", e);
+								"".to_string()
+							},
+						};
 
-			let pending = request.deadline(deadline).send().map_err(|e| {
-				log::info!("---------get pending error: {:?}", e);
-				http::Error::IoError
-			})?;
+					let content =
+						match scale_info::prelude::string::String::from_utf8(message_body.to_vec())
+						{
+							Ok(v) => v,
+							Err(e) => {
+								log::info!("------decode message body error  {:?}", e);
+								"".to_string()
+							},
+						};
 
-			let response =
-				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
-			if response.code != 200 {
-				log::warn!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown)
-			} else {
-				log::info!("email send successfully")
+					let basic_url = "http://127.0.0.1:3030/get?";
+
+					let email = BASE64.encode(to_email[..].as_bytes());
+					let subject = BASE64.encode(subject[..].as_bytes());
+					let content = BASE64.encode(content[..].as_bytes());
+
+					let url = &scale_info::prelude::format!(
+						"{}email={}&subject={}&content={}",
+						basic_url,
+						email,
+						subject,
+						content
+					)[..];
+
+					let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+					let request = http::Request::get(url);
+
+					let pending = request.deadline(deadline).send().map_err(|e| {
+						log::info!("---------get pending error: {:?}", e);
+						http::Error::IoError
+					})?;
+
+					let response =
+						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+					if response.code != 200 {
+						log::warn!("Unexpected status code: {}", response.code);
+						return Err(http::Error::Unknown)
+					} else {
+						log::info!("email send successfully")
+					}
+					let body = response.body().collect::<Vec<u8>>();
+					let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+						log::warn!("No UTF8 body");
+						http::Error::Unknown
+					})?;
+
+					log::info!("get return value: {}", body_str);
+				},
+				_ => {},
 			}
-			let body = response.body().collect::<Vec<u8>>();
-			let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
-				log::warn!("No UTF8 body");
-				http::Error::Unknown
-			})?;
-
-			log::info!("get return value: {}", body_str);
 
 			Ok(0)
 		}
-		fn send_signed_tx() -> Result<(), &'static str> {
+		fn send_discord_info(account: T::AccountId) -> Result<u64, http::Error> {
+			if let Some(Action::Discord(discord_hook_url, username, content)) =
+				T::Notification::get_discord_config_action(account)
+			{
+				let hook_url =
+					match scale_info::prelude::string::String::from_utf8(discord_hook_url.to_vec())
+					{
+						Ok(v) => v,
+						Err(e) => {
+							log::info!("------decode receiver error  {:?}", e);
+							"".to_string()
+						},
+					};
+
+				let name = match scale_info::prelude::string::String::from_utf8(username.to_vec()) {
+					Ok(v) => v,
+					Err(e) => {
+						log::info!("------decode title error  {:?}", e);
+						"".to_string()
+					},
+				};
+
+				let message = match scale_info::prelude::string::String::from_utf8(content.to_vec())
+				{
+					Ok(v) => v,
+					Err(e) => {
+						log::info!("------decode message body error  {:?}", e);
+						"".to_string()
+					},
+				};
+
+				let basic_url = "http://127.0.0.1:3030/get?";
+
+				let discord_hook_url = BASE64.encode(hook_url[..].as_bytes());
+				let discord_user_name = BASE64.encode(name[..].as_bytes());
+				let discord_message = BASE64.encode(message[..].as_bytes());
+
+				let url = &scale_info::prelude::format!(
+					"{}email={}&subject={}&content={}",
+					basic_url,
+					discord_hook_url,
+					discord_user_name,
+					discord_message
+				)[..];
+
+				let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+				let request = http::Request::get(url);
+
+				let pending = request.deadline(deadline).send().map_err(|e| {
+					log::info!("---------get pending error: {:?}", e);
+					http::Error::IoError
+				})?;
+
+				let response =
+					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+				if response.code != 200 {
+					log::warn!("Unexpected status code: {}", response.code);
+					return Err(http::Error::Unknown)
+				} else {
+					log::info!("email send successfully")
+				}
+				let body = response.body().collect::<Vec<u8>>();
+				let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+					log::warn!("No UTF8 body");
+					http::Error::Unknown
+				})?;
+
+				log::info!("get return value: {}", body_str);
+			}
+			Ok(0)
+		}
+		fn send_slack_info(account: T::AccountId) -> Result<u64, http::Error> {
+			if let Some(Action::Slack(slack_hook_url, content)) =
+				T::Notification::get_slack_config_action(account)
+			{
+				let hook_url =
+					match scale_info::prelude::string::String::from_utf8(slack_hook_url.to_vec()) {
+						Ok(v) => v,
+						Err(e) => {
+							log::info!("------decode receiver error  {:?}", e);
+							"".to_string()
+						},
+					};
+
+				let message = match scale_info::prelude::string::String::from_utf8(content.to_vec())
+				{
+					Ok(v) => v,
+					Err(e) => {
+						log::info!("------decode message body error  {:?}", e);
+						"".to_string()
+					},
+				};
+
+				let basic_url = "http://127.0.0.1:3030/get?";
+
+				let slack_hook_url = BASE64.encode(hook_url[..].as_bytes());
+				let slack_message = BASE64.encode(message[..].as_bytes());
+
+				let url = &scale_info::prelude::format!(
+					"{}email={}&subject={}",
+					basic_url,
+					slack_hook_url,
+					slack_message
+				)[..];
+
+				let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+				let request = http::Request::get(url);
+
+				let pending = request.deadline(deadline).send().map_err(|e| {
+					log::info!("---------get pending error: {:?}", e);
+					http::Error::IoError
+				})?;
+
+				let response =
+					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+				if response.code != 200 {
+					log::warn!("Unexpected status code: {}", response.code);
+					return Err(http::Error::Unknown)
+				} else {
+					log::info!("email send successfully")
+				}
+				let body = response.body().collect::<Vec<u8>>();
+				let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+					log::warn!("No UTF8 body");
+					http::Error::Unknown
+				})?;
+
+				log::info!("get return value: {}", body_str);
+			}
+			Ok(0)
+		}
+		fn send_signed_tx(account: T::AccountId) -> Result<(), &'static str> {
 			let signer = Signer::<T, T::AuthorityId>::all_accounts();
 			if !signer.can_sign() {
 				return Err(
@@ -883,14 +782,229 @@ pub mod pallet {
 				)
 			}
 
-			let results = signer.send_signed_transaction(|_account| Call::reset_email_status {});
-
-			log::info!("-------- results");
+			let results = signer.send_signed_transaction(|_account| {
+				Call::reset_notification_status { account: account.clone() }
+			});
 
 			for (acc, res) in &results {
 				match res {
 					Ok(()) => log::info!("[{:?}] Submitted change info", acc.id),
 					Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+				}
+			}
+
+			Ok(())
+		}
+
+		fn freeze_account(who: T::AccountId, risk_management_id: u64) {
+			let mut _account_freeze_status = false;
+
+			for j in 0..risk_management_id {
+				if RiskManagementOwner::<T>::contains_key(&who, &j) {
+					if let Some((_, RiskManagement::AccountFreeze(freeze))) =
+						MapRiskManagement::<T>::get(&j)
+					{
+						if freeze == true {
+							BlockAccount::<T>::insert(who.clone(), true);
+							_account_freeze_status = true;
+							log::info!("--------------------------------freeze account forever");
+
+							break
+						}
+					}
+					if _account_freeze_status == false {
+						for i in 0..risk_management_id {
+							if RiskManagementOwner::<T>::contains_key(&who, &i) {
+								if let Some((
+									_block_number,
+									RiskManagement::TimeFreeze(set_time, freeze_time),
+								)) = MapRiskManagement::<T>::get(&i)
+								{
+									match BlockTime::<T>::get(who.clone()) {
+										Some(val) =>
+											if val == true {
+												let now = frame_system::Pallet::<T>::block_number();
+
+												MapRiskManagement::<T>::mutate(&i, |v| {
+													*v = Some((
+														now,
+														RiskManagement::TimeFreeze(
+															set_time,
+															freeze_time,
+														),
+													))
+												});
+
+												log::info!(
+													"--------------------------------update block start block_number {:?}",now
+												);
+											} else {
+												let now = frame_system::Pallet::<T>::block_number();
+
+												MapRiskManagement::<T>::mutate(&i, |v| {
+													*v = Some((
+														now,
+														RiskManagement::TimeFreeze(
+															set_time,
+															freeze_time,
+														),
+													))
+												});
+
+												log::info!(
+													"--------------------------------update block start block_number {:?}",now
+												);
+												BlockTime::<T>::mutate(who.clone(), |v| {
+													*v = Some(true)
+												})
+											},
+										None => BlockTime::<T>::insert(who.clone(), true),
+									}
+								}
+								log::info!(
+									"--------------------------------freeze account temporary"
+								);
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+
+		fn set_notify_method(who: T::AccountId, next_notify_account_index: u64) {
+			match T::Notification::get_mail_config_action(who.clone()) {
+				Some(Action::MailWithToken(..)) => {
+					log::info!("--------------------------------mail with token status is none,set mail status true");
+					MailStatus::<T>::insert(who.clone(), true);
+					MapNotifyAccount::<T>::insert(next_notify_account_index, who.clone());
+					NextNotifyAccountIndex::<T>::put(
+						next_notify_account_index.saturating_add(One::one()),
+					);
+				},
+				_ => {
+					log::info!("--------------------------------no email");
+				},
+			}
+			match T::Notification::get_slack_config_action(who.clone()) {
+				Some(_) => {
+					log::info!("-------------------------------- slack status is none,set mail status true");
+					SlackStatus::<T>::insert(who.clone(), true);
+					MapNotifyAccount::<T>::insert(next_notify_account_index, who.clone());
+					NextNotifyAccountIndex::<T>::put(
+						next_notify_account_index.saturating_add(One::one()),
+					);
+				},
+				_ => {
+					log::info!("--------------------------------no slack");
+				},
+			}
+			match T::Notification::get_discord_config_action(who.clone()) {
+				Some(_) => {
+					log::info!("--------------------------------discord with token status is none,set mail status true");
+					DiscordStatus::<T>::insert(who.clone(), true);
+					MapNotifyAccount::<T>::insert(next_notify_account_index, who.clone());
+					NextNotifyAccountIndex::<T>::put(
+						next_notify_account_index.saturating_add(One::one()),
+					);
+				},
+				_ => {
+					log::info!("--------------------------------no discord");
+				},
+			}
+		}
+
+		fn check_notify_method_and_send_info(account: T::AccountId) {
+			if MailStatus::<T>::get(account.clone()) == Some(true) {
+				match Self::send_email_info(account.clone()) {
+					Ok(val) => {
+						log::info!("email send successfully {:?}", val);
+						match Self::send_signed_tx(account.clone()) {
+							Ok(_) => {
+								log::info!("reset notification status as false")
+							},
+							Err(e) => {
+								log::info!("reset notification status as false failed {:?}", e);
+							},
+						};
+					},
+					Err(e) => log::info!("email send failed {:?}", e),
+				}
+			} else if DiscordStatus::<T>::get(account.clone()) == Some(true) {
+				match Self::send_discord_info(account.clone()) {
+					Ok(val) => {
+						log::info!("email send successfully {:?}", val);
+						match Self::send_signed_tx(account.clone()) {
+							Ok(_) => {
+								log::info!("reset notification status as false")
+							},
+							Err(e) => {
+								log::info!("reset notification status as false failed {:?}", e);
+							},
+						};
+					},
+					Err(e) => log::info!("discord send failed {:?}", e),
+				}
+			} else if SlackStatus::<T>::get(account.clone()) == Some(true) {
+				match Self::send_slack_info(account.clone()) {
+					Ok(val) => {
+						log::info!("email send successfully {:?}", val);
+						match Self::send_signed_tx(account.clone()) {
+							Ok(_) => {
+								log::info!("reset notification status as false")
+							},
+							Err(e) => {
+								log::info!("reset notification status as false failed {:?}", e);
+							},
+						};
+					},
+					Err(e) => log::info!("slack send failed {:?}", e),
+				}
+			} else {
+				log::info!("no notify method available")
+			}
+		}
+		fn check_account_status(who: T::AccountId, risk_management_id: u64) -> DispatchResult {
+			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
+				if val == true {
+					log::info!("--------------------------------account has been freezed forever");
+					ensure!(!val, Error::<T>::AccountHasBeenFrozenForever);
+				}
+			}
+
+			if let Some(val) = BlockTime::<T>::get(who.clone()) {
+				if val == true {
+					for i in 0..risk_management_id {
+						if RiskManagementOwner::<T>::contains_key(&who, &i) {
+							if let Some((
+								block_number,
+								RiskManagement::TimeFreeze(_start_time, freeze_time),
+							)) = MapRiskManagement::<T>::get(&i)
+							{
+								let now = frame_system::Pallet::<T>::block_number();
+
+								log::info!("--------------------------------end block {:?}", now);
+								log::info!(
+									"--------------------------------freeze time {:?}",
+									freeze_time / 6
+								);
+								log::info!(
+									"--------------------------------start block {:?}",
+									block_number
+								);
+
+								if now.saturated_into::<u64>() >
+									freeze_time / 6 + block_number.saturated_into::<u64>()
+								{
+									BlockTime::<T>::mutate(who.clone(), |v| *v = Some(false));
+
+									log::info!("--------------------------------unfreeze account")
+								} else {
+									ensure!(!val, Error::<T>::AccountHasBeenFrozenTemporary);
+								}
+							}
+						}
+					}
 				}
 			}
 

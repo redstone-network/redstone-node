@@ -5094,6 +5094,8 @@ dependencies = [
  "orml-utilities",
  "pallet-balances",
  "pallet-dex",
+ "pallet-difttt",
+ "pallet-notification",
  "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",

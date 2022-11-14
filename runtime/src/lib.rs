@@ -1200,6 +1200,7 @@ impl pallet_defense::Config for Runtime {
 	type PermissionCaptureInterface = PermissionCapture;
 	type Call = Call;
 	type CustomCallInterface = CustomCall;
+	type Notification = Notification;
 }
 
 parameter_types! {
