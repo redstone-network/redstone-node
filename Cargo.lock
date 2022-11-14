@@ -5435,6 +5435,7 @@ dependencies = [
 name = "pallet-notification"
 version = "0.0.1"
 dependencies = [
+ "acala-primitives",
  "frame-support",
  "frame-system",
  "pallet-balances",
@@ -5492,9 +5493,11 @@ dependencies = [
 name = "pallet-permission-capture"
 version = "0.0.1"
 dependencies = [
+ "acala-primitives",
  "frame-support",
  "frame-system",
  "pallet-balances",
+ "pallet-defense",
  "pallet-difttt",
  "parity-scale-codec",
  "scale-info",
