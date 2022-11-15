@@ -182,6 +182,8 @@ pub mod pallet {
 		CaptureExecuted(T::AccountId),
 		CaptureCancelled(T::AccountId),
 		NewCaptureConfig(T::AccountId, Vec<T::AccountId>, u16),
+		CallExecuted(T::AccountId, [u8; 32], OpaqueCall<T>),
+		CallCancelled(T::AccountId, [u8; 32], OpaqueCall<T>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -471,6 +473,11 @@ pub mod pallet {
 							call.dispatch(RawOrigin::Signed(account.clone()).into())
 								.map_err(|x| x.error)?;
 							Self::clear_call(account.clone(), &hash);
+							Self::deposit_event(Event::CallExecuted(
+								account.clone(),
+								hash,
+								active_call.info.0,
+							));
 						}
 					}
 				},
@@ -486,6 +493,12 @@ pub mod pallet {
 
 					if capture_config.threshold as usize <= active_call.denys.len() {
 						Self::clear_call(account.clone(), &hash);
+
+						Self::deposit_event(Event::CallCancelled(
+							account.clone(),
+							hash,
+							active_call.info.0,
+						));
 					}
 				},
 				_ => {},
