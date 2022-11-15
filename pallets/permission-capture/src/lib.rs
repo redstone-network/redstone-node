@@ -207,6 +207,9 @@ pub mod pallet {
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 
+		/// friends create a get account permission proposal
+		///
+		/// - `account`: the permission owner
 		#[pallet::weight(0)]
 		pub fn create_get_account_permissions(
 			origin: OriginFor<T>,  //friends
@@ -255,6 +258,9 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// friends cancel a get account permission proposal
+		///
+		/// - `account`: the permission owner
 		#[pallet::weight(0)]
 		pub fn cancel_get_account_permissions(
 			origin: OriginFor<T>,  //friends
@@ -294,10 +300,15 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// friends vote the get account permission proposal, or cancel get account permission
+		/// proposal
+		///
+		/// - `proposal_id`: the proposal id
+		/// - `_vote`: the vote type, 0: approve, 1:  deny, current default is 0.
 		#[pallet::weight(0)]
 		pub fn vote(
 			origin: OriginFor<T>, //friends
-			proposal_id: u64,     //capture owner
+			proposal_id: u64,     //proposal id
 			_vote: u16,           //0: approve, 1:  deny
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
@@ -394,6 +405,10 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// create capture config
+		///
+		/// - `friends`: the permission owner's friends
+		/// - `threshold`: the permission threshold to execute
 		#[pallet::weight(0)]
 		pub fn create_capture_config(
 			origin: OriginFor<T>, //capture owner
@@ -415,6 +430,11 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// vote for call hash of permission owner's
+		///
+		/// - `account`: the permission owner
+		/// - `hash`: the call hash of permission
+		/// - `vote`: the vote type, 0: approve, 1:  deny,
 		#[pallet::weight(0)]
 		pub fn operational_voting(
 			origin: OriginFor<T>, //friends
