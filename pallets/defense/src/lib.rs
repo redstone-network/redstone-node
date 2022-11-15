@@ -61,16 +61,20 @@ pub mod crypto {
 	}
 }
 
+/// a enum to organize different limitations of transferring money
+/// there are two kind of predefined limitations
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum TransferLimit<Balance> {
-	AmountLimit(u64, Balance), // limit per transaction
-	TimesLimit(u64, u64),      // limit on transactions per 100 blocks
+	AmountLimit(u64, Balance), // amount limit per transaction
+	TimesLimit(u64, u64),      // times limit per 100 blocks
 }
 
+/// a enum to organize different protect actions  when illegal transactions occur
+/// there are two kind of predefined actions
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum RiskManagement {
-	TimeFreeze(u64, u64), // freeze duration
-	AccountFreeze(bool),
+	TimeFreeze(u64, u64), // freeze account for a period of time
+	AccountFreeze(bool),  // freeze account forever
 }
 
 #[frame_support::pallet]
@@ -120,7 +124,6 @@ pub mod pallet {
 			+ From<frame_system::Call<Self>>;
 
 		type CustomCallInterface: CustomCallInterface<Self::AccountId, BalanceOf<Self>>;
-
 		type Notification: NotificationInfoInterface<Self::AccountId, Action<Self::AccountId>>;
 	}
 
@@ -136,7 +139,7 @@ pub mod pallet {
 	pub(super) type MapRiskManagement<T: Config> =
 		StorageMap<_, Twox64Concat, u64, (T::BlockNumber, RiskManagement)>;
 
-	/// storage transfer limit owner
+	/// storage owner,id of transfer limit instance
 	#[pallet::storage]
 	#[pallet::getter(fn transfer_limit_owner)]
 	pub type TransferLimitOwner<T: Config> = StorageDoubleMap<
@@ -149,7 +152,7 @@ pub mod pallet {
 		OptionQuery,
 	>;
 
-	/// store risk management owner
+	/// store owner,id of risk management instance
 	#[pallet::storage]
 	#[pallet::getter(fn risk_management_owner)]
 	pub type RiskManagementOwner<T: Config> = StorageDoubleMap<
@@ -162,18 +165,22 @@ pub mod pallet {
 		OptionQuery,
 	>;
 
+	/// store next id of transfer limit instance
 	#[pallet::storage]
 	#[pallet::getter(fn next_transfer_limit_id)]
 	pub type NextTransferLimitId<T: Config> = StorageValue<_, u64>;
 
+	/// store next id of risk management instance
 	#[pallet::storage]
 	#[pallet::getter(fn next_risk_management_id)]
 	pub type NextRiskManagementId<T: Config> = StorageValue<_, u64>;
 
+	/// store account block status
 	#[pallet::storage]
 	#[pallet::getter(fn block_account)]
 	pub type BlockAccount<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
+	/// store account block time
 	#[pallet::storage]
 	#[pallet::getter(fn block_time)]
 	pub type BlockTime<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
@@ -182,49 +189,58 @@ pub mod pallet {
 	#[pallet::getter(fn next_account_index)]
 	pub type NextNotifyAccountIndex<T: Config> = StorageValue<_, u64>;
 
-	/// store risk management
+	/// store all accounts need to notify
 	#[pallet::storage]
 	#[pallet::getter(fn notify_account_map)]
 	pub(super) type MapNotifyAccount<T: Config> = StorageMap<_, Twox64Concat, u64, T::AccountId>;
 
+	/// store account's method of notification as email
 	#[pallet::storage]
 	#[pallet::getter(fn mail_status)]
 	pub(super) type MailStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
+	/// store account's method of notification as slack
 	#[pallet::storage]
 	#[pallet::getter(fn slack_status)]
 	pub(super) type SlackStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
+	/// store account's method of notification as discord
 	#[pallet::storage]
 	#[pallet::getter(fn discord_status)]
 	pub(super) type DiscordStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
+	/// events which indicate that users' call execute successfully
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		TransferAmountLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),
-		TransferTimesLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),
-		TransferAmountLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>),
-		TransferTimesLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>),
-		RiskManagementTimeFreezeSet(T::AccountId, RiskManagement),
-		RiskManagementAccountFreezeSet(T::AccountId, RiskManagement),
-		RiskManagementMailSet(T::AccountId, RiskManagement),
-		RiskManagementMailUpdated(T::AccountId, RiskManagement),
-		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>),
+		TransferAmountLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>), // set amount limit
+		TransferTimesLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),  // set times limit
+		TransferAmountLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update amount limit
+		TransferTimesLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update times limit
+		RiskManagementTimeFreezeSet(T::AccountId, RiskManagement),         /* freeze amount for
+		                                                                    * a period of time */
+		RiskManagementAccountFreezeSet(T::AccountId, RiskManagement), // freeze account forever
+
+		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>), // transfer success
 	}
 
+	/// events which indicate that users' call execute fail
 	#[pallet::error]
 	pub enum Error<T> {
-		FreezeTimeHasSet,
-		FreezeAccountHasSet,
-		TransferValueTooLarge,
-		TransferTimesTooMany,
-		AccountHasBeenFrozenForever,
-		AccountHasBeenFrozenTemporary,
-		PermissionTakenAccountHasPaddingCall,
-		PermissionTakenAccountCallMustBeApproved,
+		FreezeTimeHasSet,    // set account freeze time duplicate
+		FreezeAccountHasSet, // set freeze account duplicate
+		TransferValueTooLarge, /* transfer amount reach out transfer amount
+		                      * limitation */
+		TransferTimesTooMany, // transfer times reach out transfer times limitation
+		AccountHasBeenFrozenForever, // transfer again when account has been frozen forever
+		AccountHasBeenFrozenTemporary, // transfer again when account has been frozen temporarily
+		PermissionTakenAccountHasPaddingCall, // frozen account has been in pending list
+		PermissionTakenAccountCallMustBeApproved, // take frozen account must be approved
 	}
 
+	/// a function can set different transfer limitations, such as amount per transaction, times per
+	/// 100 blocks. All these limitations will be triggered when someone try to stole money from
+	/// current account at the same time, transaction will fail and emit error
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(10_000)]
@@ -317,6 +333,9 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// a function to set some protections when illegal transactions occur.For example,the
+		/// current account will be frozen(if account owner set this action) when transfer amount is
+		/// more than your transfer amount limitation
 		#[pallet::weight(10_000)]
 		pub fn set_risk_management(
 			origin: OriginFor<T>,
@@ -390,6 +409,10 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// a function that is more safe when transfer money to others, it will check all conditions
+		/// account owner set before when some illegal transactions triggered, account's balance
+		/// will be protected and account owner will get notification timely via email,slack and
+		/// discord
 		#[pallet::weight(10_000)]
 		pub fn safe_transfer(
 			origin: OriginFor<T>,
@@ -522,6 +545,9 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// notification will be send only one time
+		/// when sending finished, resending flag will be set false
+
 		#[pallet::weight(0)]
 		pub fn reset_notification_status(
 			origin: OriginFor<T>,
@@ -564,6 +590,7 @@ pub mod pallet {
 		}
 	}
 
+	/// all notification will be send via offchain_worker, it is more efficient
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
@@ -579,6 +606,9 @@ pub mod pallet {
 		}
 	}
 
+	/// send email information
+	/// all info will be send to mail server, then mail server will delivery mails to different to
+	/// account owner
 	impl<T: Config> Pallet<T> {
 		fn send_email_info(account: T::AccountId) -> Result<u64, http::Error> {
 			match T::Notification::get_mail_config_action(account) {
@@ -655,6 +685,9 @@ pub mod pallet {
 
 			Ok(0)
 		}
+
+		/// send discord information
+		/// another way to get information for account owner
 		fn send_discord_info(account: T::AccountId) -> Result<u64, http::Error> {
 			if let Some(Action::Discord(discord_hook_url, username, content)) =
 				T::Notification::get_discord_config_action(account)
@@ -727,6 +760,8 @@ pub mod pallet {
 			}
 			Ok(0)
 		}
+		/// send slack information
+		/// another way to get information for account owner
 		fn send_slack_info(account: T::AccountId) -> Result<u64, http::Error> {
 			if let Some(Action::Slack(slack_hook_url, content)) =
 				T::Notification::get_slack_config_action(account)
@@ -788,6 +823,8 @@ pub mod pallet {
 			}
 			Ok(0)
 		}
+
+		/// to change notification status so that void send info again
 		fn send_signed_tx(account: T::AccountId) -> Result<(), &'static str> {
 			let signer = Signer::<T, T::AuthorityId>::all_accounts();
 			if !signer.can_sign() {
@@ -810,6 +847,7 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// a helper function to freeze account according to different protect actions
 		fn freeze_account(who: T::AccountId, risk_management_id: u64) {
 			let mut _account_freeze_status = false;
 
@@ -886,6 +924,8 @@ pub mod pallet {
 			}
 		}
 
+		/// set notify method such as email,discord and slack
+
 		fn set_notify_method(who: T::AccountId, next_notify_account_index: u64) {
 			match T::Notification::get_mail_config_action(who.clone()) {
 				Some(Action::MailWithToken(..)) => {
@@ -928,6 +968,7 @@ pub mod pallet {
 			}
 		}
 
+		/// check notify method and send info
 		fn check_notify_method_and_send_info(account: T::AccountId) {
 			if MailStatus::<T>::get(account.clone()) == Some(true) {
 				match Self::send_email_info(account.clone()) {
@@ -978,6 +1019,9 @@ pub mod pallet {
 				log::info!("no notify method available")
 			}
 		}
+
+		/// check account status, if it's frozen forever, do nothing
+		/// if it's frozen temporarily,keep still or unfrozen account
 		fn check_account_status(who: T::AccountId, risk_management_id: u64) -> DispatchResult {
 			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
 				if val == true {

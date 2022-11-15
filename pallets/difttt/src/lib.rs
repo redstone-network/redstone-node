@@ -2,6 +2,7 @@
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{traits::ConstU32, BoundedVec};
+use scale_info::prelude::string::String;
 /// Edit this file to define custom logic or remove it if it is not needed.
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/v3/runtime/frame>

@@ -72,7 +72,7 @@ where
 		let bond_amount = amount.min(available);
 
 		if bond_amount == 0 {
-			return Ok(None);
+			return Ok(None)
 		}
 
 		let old_active = ledger.active();
@@ -96,7 +96,7 @@ where
 		let (ledger, unbond_amount) = ledger.unbond(amount, at).map_err(Self::convert_error)?;
 
 		if unbond_amount == 0 {
-			return Ok(None);
+			return Ok(None)
 		}
 
 		Self::Ledger::insert(&who, &ledger);
@@ -115,7 +115,7 @@ where
 		let (ledger, unbond_amount) = ledger.unbond_instant(amount).map_err(Self::convert_error)?;
 
 		if unbond_amount == 0 {
-			return Ok(None);
+			return Ok(None)
 		}
 
 		Self::Ledger::insert(&who, &ledger);
@@ -131,7 +131,7 @@ where
 		let (ledger, rebond_amount) = ledger.rebond(amount).map_err(Self::convert_error)?;
 
 		if rebond_amount == 0 {
-			return Ok(None);
+			return Ok(None)
 		}
 
 		Self::Ledger::insert(&who, &ledger);
@@ -154,7 +154,7 @@ where
 		let diff = old_total.saturating_sub(new_total);
 
 		if diff == 0 {
-			return Ok(None);
+			return Ok(None)
 		}
 
 		if new_total == 0 {

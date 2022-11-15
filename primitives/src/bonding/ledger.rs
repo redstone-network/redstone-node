@@ -101,7 +101,7 @@ where
 				if let Some(last) = unlocking.last_mut() {
 					if last.unlock_at == unlock_at {
 						last.value = last.value.saturating_add(amount);
-						return;
+						return
 					}
 				}
 				// or make a new one
@@ -159,7 +159,7 @@ where
 					}
 
 					if unlocking_balance >= value {
-						break;
+						break
 					}
 				}
 			})
@@ -176,7 +176,7 @@ where
 
 	fn check_min_bond(&self) -> Result<(), Error> {
 		if self.active > 0 && self.active < MinBond::get() {
-			return Err(Error::BelowMinBondThreshold);
+			return Err(Error::BelowMinBondThreshold)
 		}
 		Ok(())
 	}

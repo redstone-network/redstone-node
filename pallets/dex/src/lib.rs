@@ -550,20 +550,20 @@ pub mod module {
 				Error::<T>::MustBeDisabled
 			);
 			ensure!(
-				T::Currency::total_issuance(trading_pair.dex_share_currency_id()).is_zero()
-					&& ProvisioningPool::<T>::iter_prefix(trading_pair).next().is_none(),
+				T::Currency::total_issuance(trading_pair.dex_share_currency_id()).is_zero() &&
+					ProvisioningPool::<T>::iter_prefix(trading_pair).next().is_none(),
 				Error::<T>::NotAllowedList
 			);
 
 			let check_asset_registry = |currency_id: CurrencyId| match currency_id {
-				CurrencyId::Erc20(_)
-				| CurrencyId::ForeignAsset(_)
-				| CurrencyId::StableAssetPoolToken(_) => T::Erc20InfoMapping::name(currency_id)
+				CurrencyId::Erc20(_) |
+				CurrencyId::ForeignAsset(_) |
+				CurrencyId::StableAssetPoolToken(_) => T::Erc20InfoMapping::name(currency_id)
 					.map(|_| ())
 					.ok_or(Error::<T>::AssetUnregistered),
-				CurrencyId::Token(_)
-				| CurrencyId::DexShare(_, _)
-				| CurrencyId::LiquidCrowdloan(_) => Ok(()), /* No registration required */
+				CurrencyId::Token(_) |
+				CurrencyId::DexShare(_, _) |
+				CurrencyId::LiquidCrowdloan(_) => Ok(()), /* No registration required */
 			};
 			check_asset_registry(currency_id_a)?;
 			check_asset_registry(currency_id_b)?;
@@ -653,12 +653,12 @@ pub mod module {
 					let (total_provision_0, total_provision_1) =
 						provisioning_parameters.accumulated_provision;
 					ensure!(
-						frame_system::Pallet::<T>::block_number()
-							>= provisioning_parameters.not_before
-							&& !total_provision_0.is_zero()
-							&& !total_provision_1.is_zero()
-							&& (total_provision_0 >= provisioning_parameters.target_provision.0
-								|| total_provision_1 >= provisioning_parameters.target_provision.1),
+						frame_system::Pallet::<T>::block_number() >=
+							provisioning_parameters.not_before &&
+							!total_provision_0.is_zero() && !total_provision_1.is_zero() &&
+							(total_provision_0 >= provisioning_parameters.target_provision.0 ||
+								total_provision_1 >=
+									provisioning_parameters.target_provision.1),
 						Error::<T>::UnqualifiedProvision
 					);
 
@@ -742,8 +742,8 @@ pub mod module {
 				TradingPairStatus::<_, _>::Disabled => {},
 				TradingPairStatus::<_, _>::Provisioning(provisioning_parameters) => {
 					ensure!(
-						provisioning_parameters.accumulated_provision.0.is_zero()
-							&& provisioning_parameters.accumulated_provision.1.is_zero(),
+						provisioning_parameters.accumulated_provision.0.is_zero() &&
+							provisioning_parameters.accumulated_provision.1.is_zero(),
 						Error::<T>::StillProvisioning
 					);
 				},
@@ -860,12 +860,12 @@ pub mod module {
 				TradingPairStatus::<_, _>::Provisioning(provisioning_parameters) => {
 					let (total_provision_0, total_provision_1) =
 						provisioning_parameters.accumulated_provision;
-					let met_target = !total_provision_0.is_zero()
-						&& !total_provision_1.is_zero()
-						&& (total_provision_0 >= provisioning_parameters.target_provision.0
-							|| total_provision_1 >= provisioning_parameters.target_provision.1);
-					let expired = frame_system::Pallet::<T>::block_number()
-						> provisioning_parameters
+					let met_target = !total_provision_0.is_zero() &&
+						!total_provision_1.is_zero() &&
+						(total_provision_0 >= provisioning_parameters.target_provision.0 ||
+							total_provision_1 >= provisioning_parameters.target_provision.1);
+					let expired = frame_system::Pallet::<T>::block_number() >
+						provisioning_parameters
 							.not_before
 							.saturating_add(T::ExtendedProvisioningBlocks::get());
 
@@ -990,8 +990,8 @@ impl<T: Config> Pallet<T> {
 		};
 
 		ensure!(
-			contribution_0 >= provision_parameters.min_contribution.0
-				|| contribution_1 >= provision_parameters.min_contribution.1,
+			contribution_0 >= provision_parameters.min_contribution.0 ||
+				contribution_1 >= provision_parameters.min_contribution.1,
 			Error::<T>::InvalidContributionIncrement
 		);
 
@@ -1190,7 +1190,7 @@ impl<T: Config> Pallet<T> {
 		by_unstake: bool,
 	) -> sp_std::result::Result<(Balance, Balance), DispatchError> {
 		if remove_share.is_zero() {
-			return Ok((Zero::zero(), Zero::zero()));
+			return Ok((Zero::zero(), Zero::zero()))
 		}
 		let trading_pair = TradingPair::from_currency_ids(currency_id_a, currency_id_b)
 			.ok_or(Error::<T>::InvalidCurrencyId)?;
@@ -1531,9 +1531,8 @@ impl<T: Config> DEXManager<T::AccountId, Balance, CurrencyId> for Pallet<T> {
 		let trading_pair = TradingPair::from_currency_ids(currency_id_a, currency_id_b)?;
 		match Self::trading_pair_statuses(trading_pair) {
 			TradingPairStatus::<_, _>::Disabled => None,
-			TradingPairStatus::<_, _>::Provisioning(_) | TradingPairStatus::<_, _>::Enabled => {
-				T::Erc20InfoMapping::encode_evm_address(trading_pair.dex_share_currency_id())
-			},
+			TradingPairStatus::<_, _>::Provisioning(_) | TradingPairStatus::<_, _>::Enabled =>
+				T::Erc20InfoMapping::encode_evm_address(trading_pair.dex_share_currency_id()),
 		}
 	}
 
@@ -1542,24 +1541,22 @@ impl<T: Config> DEXManager<T::AccountId, Balance, CurrencyId> for Pallet<T> {
 		limit: SwapLimit<Balance>,
 	) -> Option<(Balance, Balance)> {
 		match limit {
-			SwapLimit::ExactSupply(exact_supply_amount, minimum_target_amount) => {
+			SwapLimit::ExactSupply(exact_supply_amount, minimum_target_amount) =>
 				Self::get_target_amounts(path, exact_supply_amount).ok().and_then(|amounts| {
 					if amounts[amounts.len() - 1] >= minimum_target_amount {
 						Some((exact_supply_amount, amounts[amounts.len() - 1]))
 					} else {
 						None
 					}
-				})
-			},
-			SwapLimit::ExactTarget(maximum_supply_amount, exact_target_amount) => {
+				}),
+			SwapLimit::ExactTarget(maximum_supply_amount, exact_target_amount) =>
 				Self::get_supply_amounts(path, exact_target_amount).ok().and_then(|amounts| {
 					if amounts[0] <= maximum_supply_amount {
 						Some((amounts[0], exact_target_amount))
 					} else {
 						None
 					}
-				})
-			},
+				}),
 		}
 	}
 
@@ -1592,7 +1589,7 @@ impl<T: Config> DEXManager<T::AccountId, Balance, CurrencyId> for Pallet<T> {
 				{
 					if let Some((_, previous_supply, previous_target)) = maybe_best {
 						if supply_amount > previous_supply || target_amount < previous_target {
-							continue;
+							continue
 						}
 					}
 
@@ -1610,24 +1607,22 @@ impl<T: Config> DEXManager<T::AccountId, Balance, CurrencyId> for Pallet<T> {
 		limit: SwapLimit<Balance>,
 	) -> sp_std::result::Result<(Balance, Balance), DispatchError> {
 		match limit {
-			SwapLimit::ExactSupply(exact_supply_amount, minimum_target_amount) => {
+			SwapLimit::ExactSupply(exact_supply_amount, minimum_target_amount) =>
 				Self::do_swap_with_exact_supply(
 					who,
 					path,
 					exact_supply_amount,
 					minimum_target_amount,
 				)
-				.map(|actual_target_amount| (exact_supply_amount, actual_target_amount))
-			},
-			SwapLimit::ExactTarget(maximum_supply_amount, exact_target_amount) => {
+				.map(|actual_target_amount| (exact_supply_amount, actual_target_amount)),
+			SwapLimit::ExactTarget(maximum_supply_amount, exact_target_amount) =>
 				Self::do_swap_with_exact_target(
 					who,
 					path,
 					exact_target_amount,
 					maximum_supply_amount,
 				)
-				.map(|actual_supply_amount| (actual_supply_amount, exact_target_amount))
-			},
+				.map(|actual_supply_amount| (actual_supply_amount, exact_target_amount)),
 		}
 	}
 
@@ -1684,24 +1679,22 @@ impl<T: Config> SwapTokenInterface<T::AccountId, Balance, CurrencyId> for Pallet
 		limit: SwapLimit<Balance>,
 	) -> sp_std::result::Result<(Balance, Balance), DispatchError> {
 		match limit {
-			SwapLimit::ExactSupply(exact_supply_amount, minimum_target_amount) => {
+			SwapLimit::ExactSupply(exact_supply_amount, minimum_target_amount) =>
 				Self::do_swap_with_exact_supply(
 					who,
 					path,
 					exact_supply_amount,
 					minimum_target_amount,
 				)
-				.map(|actual_target_amount| (exact_supply_amount, actual_target_amount))
-			},
-			SwapLimit::ExactTarget(maximum_supply_amount, exact_target_amount) => {
+				.map(|actual_target_amount| (exact_supply_amount, actual_target_amount)),
+			SwapLimit::ExactTarget(maximum_supply_amount, exact_target_amount) =>
 				Self::do_swap_with_exact_target(
 					who,
 					path,
 					exact_target_amount,
 					maximum_supply_amount,
 				)
-				.map(|actual_supply_amount| (actual_supply_amount, exact_target_amount))
-			},
+				.map(|actual_supply_amount| (actual_supply_amount, exact_target_amount)),
 		}
 	}
 }

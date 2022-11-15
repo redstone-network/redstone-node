@@ -376,7 +376,7 @@ pub fn new_full_base(
 		sp_keystore::SyncCryptoStore::sr25519_generate_new(
 			&*keystore,
 			node_runtime::pallet_defense::KEY_TYPE,
-			Some("//Alice"), //添加的是Alice账户，测试用的，本身有很多余额，也是Sudo
+			Some("//Alice"), /* 添加的是Alice账户，测试用的，本身有很多余额，也是Sudo */
 		)
 		.expect("Creating key with account Alice should succeed.");
 
@@ -706,7 +706,7 @@ mod tests {
 						sc_consensus_babe::authorship::claim_slot(slot.into(), &epoch, &keystore)
 							.map(|(digest, _)| digest)
 					{
-						break (babe_pre_digest, epoch_descriptor);
+						break (babe_pre_digest, epoch_descriptor)
 					}
 
 					slot += 1;
