@@ -1,0 +1,20 @@
+version: "3.5"
+networks:
+  redstonenetwork:
+    name: redstonenetwork
+
+services:
+  redstone-node:
+    container_name: redstone-node
+    image: baidang201/redstone-node:latest
+    working_dir: /var/www/substrate
+    ports:
+      - "9944:9944"
+    environment:
+      - CARGO_HOME=/var/www/substrate/.cargo
+    command: /usr/local/bin/substrate --dev --rpc-cors all --rpc-methods=unsafe --rpc-external --unsafe-ws-external --unsafe-rpc-external
+    restart: always
+    networks:
+      redstonenetwork:
+        aliases: 
+          - redstonenetwork
