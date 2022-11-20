@@ -515,7 +515,7 @@ pub mod pallet {
 				if <ActiveCalls<T>>::contains_key(account.clone(), call_hash) {
 					let active_call = ActiveCalls::<T>::get(account.clone(), call_hash).unwrap();
 
-					return capture_config.threshold as usize <= active_call.approvals.len()
+					return capture_config.threshold as usize <= active_call.approvals.len();
 				}
 			}
 
@@ -539,7 +539,7 @@ pub mod pallet {
 				},
 			);
 
-			return true
+			return true;
 		}
 	}
 }

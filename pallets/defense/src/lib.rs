@@ -1,3 +1,17 @@
+//! # Defense Pallet
+//!
+//! A secure module for protecting users' asset
+//!
+//! ## Overview
+//!
+//! The Defense module provides functionality for asset protection of asset
+//!
+//! Including:
+//!
+//! * set_transfer_limit
+//! * set_risk_management
+//! * safe_transfer
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;

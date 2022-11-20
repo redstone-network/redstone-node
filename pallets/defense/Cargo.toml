@@ -40,6 +40,7 @@ pallet-dex = { version = "2.8.2", default-features = false, path = "../dex"}
 support = { package = "module-support", path = "../support", default-features = false }
 pallet-notification = { default-features = false, path = "../notification"}
 pallet-difttt = { default-features = false, path = "../difttt"}
+pallet-permission-capture = { default-features = false, path = "../permission-capture"}
 
 [dev-dependencies]
 sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
@@ -54,6 +55,7 @@ pallet-dex = { version = "2.8.2", default-features = false, path = "../dex"}
 support = { package = "module-support", path = "../support", default-features = false }
 pallet-balances = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }
 
+
 [features]
 default = ["std"]
 std = [
@@ -67,7 +69,8 @@ std = [
 	"sp-core/std",
 	"pallet-timestamp/std",
 	"pallet-balances/std",
-	"pallet-dex/std"
+	"pallet-dex/std",
+	"pallet-difttt/std"
 ]
 
 runtime-benchmarks = ["frame-benchmarking/runtime-benchmarks"]
