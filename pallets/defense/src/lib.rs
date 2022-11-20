@@ -290,7 +290,7 @@ pub mod pallet {
 								set_amount_limit = true;
 								log::info!("--------------------------------update transfer amount limit successfully");
 
-								break;
+								break
 							}
 						},
 						TransferLimit::TimesLimit(_set_time, _times) => {
@@ -311,7 +311,7 @@ pub mod pallet {
 								set_times_limit = true;
 								log::info!("--------------------------------update transfer times limit successfully");
 
-								break;
+								break
 							}
 						},
 					}
@@ -464,7 +464,7 @@ pub mod pallet {
 						call_wrapper,
 						Default::default(),
 					);
-					return Ok(());
+					return Ok(())
 				}
 			}
 
@@ -514,7 +514,7 @@ pub mod pallet {
 							Some((
 								_block_number,
 								TransferLimit::AmountLimit(_start_time, amount),
-							)) => {
+							)) =>
 								if value > amount {
 									Self::freeze_account(who.clone(), risk_management_id);
 
@@ -523,8 +523,7 @@ pub mod pallet {
 									ensure!(amount > value, Error::<T>::TransferValueTooLarge);
 								} else {
 									satisfy_amount_limit = true;
-								}
-							},
+								},
 							_ => {
 								log::info!(
 									"--------------------------------not set any transfer limit"
@@ -534,9 +533,9 @@ pub mod pallet {
 					}
 				}
 
-				if satisfy_amount_limit == true
-					|| satisfy_times_limit == true
-					|| transfer_limit_not_set == true
+				if satisfy_amount_limit == true ||
+					satisfy_times_limit == true ||
+					transfer_limit_not_set == true
 				{
 					if let Some(val) = BlockAccount::<T>::get(who.clone()) {
 						if val == true {
@@ -683,7 +682,7 @@ pub mod pallet {
 						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 					if response.code != 200 {
 						log::warn!("Unexpected status code: {}", response.code);
-						return Err(http::Error::Unknown);
+						return Err(http::Error::Unknown)
 					} else {
 						log::info!("email send successfully")
 					}
@@ -761,7 +760,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown);
+					return Err(http::Error::Unknown)
 				} else {
 					log::info!("email send successfully")
 				}
@@ -824,7 +823,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown);
+					return Err(http::Error::Unknown)
 				} else {
 					log::info!("email send successfully")
 				}
@@ -845,7 +844,7 @@ pub mod pallet {
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				);
+				)
 			}
 
 			let results = signer.send_signed_transaction(|_account| {
@@ -876,7 +875,7 @@ pub mod pallet {
 							_account_freeze_status = true;
 							log::info!("--------------------------------freeze account forever");
 
-							break;
+							break
 						}
 					}
 					if _account_freeze_status == false {
@@ -888,7 +887,7 @@ pub mod pallet {
 								)) = MapRiskManagement::<T>::get(&i)
 								{
 									match BlockTime::<T>::get(who.clone()) {
-										Some(val) => {
+										Some(val) =>
 											if val == true {
 												let now = frame_system::Pallet::<T>::block_number();
 
@@ -924,15 +923,14 @@ pub mod pallet {
 												BlockTime::<T>::mutate(who.clone(), |v| {
 													*v = Some(true)
 												})
-											}
-										},
+											},
 										None => BlockTime::<T>::insert(who.clone(), true),
 									}
 								}
 								log::info!(
 									"--------------------------------freeze account temporary"
 								);
-								break;
+								break
 							}
 						}
 					}
@@ -1067,8 +1065,8 @@ pub mod pallet {
 									block_number
 								);
 
-								if now.saturated_into::<u64>()
-									> freeze_time / 6 + block_number.saturated_into::<u64>()
+								if now.saturated_into::<u64>() >
+									freeze_time / 6 + block_number.saturated_into::<u64>()
 								{
 									BlockTime::<T>::mutate(who.clone(), |v| *v = Some(false));
 

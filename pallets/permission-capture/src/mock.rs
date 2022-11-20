@@ -31,6 +31,7 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances,
 		PermissionCaptureModule: pallet_permission_capture,
 		DefenseModule: pallet_defense,
+		NotificationModule: pallet_notification,
 	}
 );
 
@@ -92,6 +93,7 @@ impl pallet_defense::Config for Test {
 	type AuthorityId = TestAuthId;
 	type PermissionCaptureInterface = PermissionCaptureModule;
 	type CustomCallInterface = CustomCall;
+	type Notification = NotificationModule;
 }
 
 parameter_types! {
@@ -133,6 +135,10 @@ where
 	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
 		Some((call, (nonce, ())))
 	}
+}
+
+impl pallet_notification::Config for Test {
+	type Event = Event;
 }
 
 // Build genesis storage according to the mock runtime.

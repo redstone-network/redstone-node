@@ -15,11 +15,7 @@ use sp_core::{
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 
-use pallet_notification::NotificationInfoInterface;
-use primitives::{
-	custom_call::CustomCallInterface, permission_capture::PermissionCaptureInterface,
-	ReserveIdentifier,
-};
+use primitives::{custom_call::CustomCallInterface, ReserveIdentifier};
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
