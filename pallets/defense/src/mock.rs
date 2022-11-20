@@ -5,7 +5,12 @@ use frame_support::{
 };
 use frame_system as system;
 
-use sp_core::{sr25519::Signature, H256};
+use codec::Encode;
+use pallet_defense::Call as DefenseCall;
+use sp_core::{
+	sr25519::{Public, Signature},
+	H256,
+};
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -25,7 +30,7 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system,
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		DefenseModule: pallet_defense::{Pallet, Call, Storage, Event<T>},
+		DefenseModule: pallet_defense,
 		NotificationModule: pallet_notification,
 		PermissionCaptureModule: pallet_permission_capture,
 	}
@@ -47,14 +52,14 @@ impl system::Config for Test {
 	type BlockNumber = u64;
 	type Hash = H256;
 	type Hashing = BlakeTwo256;
-	type AccountId = u64;
+	type AccountId = sp_core::sr25519::Public;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
 	type Event = Event;
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = pallet_balances::AccountData<u64>;
+	type AccountData = pallet_balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -64,15 +69,14 @@ impl system::Config for Test {
 }
 
 parameter_types! {
-	// pub const ExistentialDeposit: Balance = 0;
+	pub const ExistentialDeposit: u64 = 0;
 	pub const MaxReserves: u32 = 50;
 }
 impl pallet_balances::Config for Test {
-	type Balance = u64;
+	type Balance = u128;
 	type DustRemoval = ();
 	type Event = Event;
-	type ExistentialDeposit = ConstU64<1>;
-
+	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
 	type MaxLocks = ();
 	type MaxReserves = MaxReserves;
@@ -92,10 +96,15 @@ impl pallet_defense::Config for Test {
 
 type Extrinsic = TestXt<Call, ()>;
 type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+
+parameter_types! {
+	pub const MaxFriends: u32 = 128;
+}
+
 pub struct CustomCall;
 impl CustomCallInterface<AccountId, u128> for CustomCall {
 	fn call_transfer(to: AccountId, value: u128) -> Vec<u8> {
-		let call = Call::DefenseModule(DefenseModule::Call::safe_transfer { to, value });
+		let call = Call::DefenseModule(DefenseCall::safe_transfer { to, value });
 		call.encode()
 	}
 }
@@ -140,12 +149,19 @@ impl pallet_permission_capture::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut ts = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	pallet_balances::GenesisConfig::<Test> { balances: vec![(0, 1000), (1, 1000), (2, 1000)] }
-		.assimilate_storage(&mut ts)
-		.unwrap();
-	let mut ts = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
-	let mut ext = sp_io::TestExternalities::new(ts);
+	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![
+			(Public::from_raw([0; 32]), 100),
+			(Public::from_raw([1; 32]), 100),
+			(Public::from_raw([2; 32]), 100),
+			(Public::from_raw([3; 32]), 100),
+			(Public::from_raw([4; 32]), 100),
+		],
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
+	let mut ext = sp_io::TestExternalities::new(t);
 	ext.execute_with(|| System::set_block_number(1));
 	ext
 }
