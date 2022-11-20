@@ -182,6 +182,8 @@ pub mod pallet {
 		CaptureExecuted(T::AccountId),
 		CaptureCancelled(T::AccountId),
 		NewCaptureConfig(T::AccountId, Vec<T::AccountId>, u16),
+		CallExecuted(T::AccountId, [u8; 32], OpaqueCall<T>),
+		CallCancelled(T::AccountId, [u8; 32], OpaqueCall<T>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -207,6 +209,9 @@ pub mod pallet {
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 
+		/// friends create a get account permission proposal
+		///
+		/// - `account`: the permission owner
 		#[pallet::weight(0)]
 		pub fn create_get_account_permissions(
 			origin: OriginFor<T>,  //friends
@@ -255,6 +260,9 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// friends cancel a get account permission proposal
+		///
+		/// - `account`: the permission owner
 		#[pallet::weight(0)]
 		pub fn cancel_get_account_permissions(
 			origin: OriginFor<T>,  //friends
@@ -294,10 +302,15 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// friends vote the get account permission proposal, or cancel get account permission
+		/// proposal
+		///
+		/// - `proposal_id`: the proposal id
+		/// - `_vote`: the vote type, 0: approve, 1:  deny, current default is 0.
 		#[pallet::weight(0)]
 		pub fn vote(
 			origin: OriginFor<T>, //friends
-			proposal_id: u64,     //capture owner
+			proposal_id: u64,     //proposal id
 			_vote: u16,           //0: approve, 1:  deny
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
@@ -394,6 +407,10 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// create capture config
+		///
+		/// - `friends`: the permission owner's friends
+		/// - `threshold`: the permission threshold to execute
 		#[pallet::weight(0)]
 		pub fn create_capture_config(
 			origin: OriginFor<T>, //capture owner
@@ -415,6 +432,11 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// vote for call hash of permission owner's
+		///
+		/// - `account`: the permission owner
+		/// - `hash`: the call hash of permission
+		/// - `vote`: the vote type, 0: approve, 1:  deny,
 		#[pallet::weight(0)]
 		pub fn operational_voting(
 			origin: OriginFor<T>, //friends
@@ -451,6 +473,11 @@ pub mod pallet {
 							call.dispatch(RawOrigin::Signed(account.clone()).into())
 								.map_err(|x| x.error)?;
 							Self::clear_call(account.clone(), &hash);
+							Self::deposit_event(Event::CallExecuted(
+								account.clone(),
+								hash,
+								active_call.info.0,
+							));
 						}
 					}
 				},
@@ -466,6 +493,12 @@ pub mod pallet {
 
 					if capture_config.threshold as usize <= active_call.denys.len() {
 						Self::clear_call(account.clone(), &hash);
+
+						Self::deposit_event(Event::CallCancelled(
+							account.clone(),
+							hash,
+							active_call.info.0,
+						));
 					}
 				},
 				_ => {},
