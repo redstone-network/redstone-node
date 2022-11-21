@@ -151,23 +151,10 @@ fn safe_transfer_should_work() {
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), times_limit));
 		// assert
 		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 3));
-	});
-}
 
-#[test]
-fn safe_transfer_should_fail_when_transfer_value_is_larger_than_set_amount() {
-	new_test_ext().execute_with(|| {
-		let signer = Public::from_raw([0; 32]);
-		let to = Public::from_raw([1; 32]);
-
-		let amount_limit = TransferLimit::AmountLimit(1, 50);
-
-		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
-
-		assert_noop!(
-			DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
-			Error::<Test>::TransferValueTooLarge
-		);
+		System::assert_has_event(Event::DefenseModule(crate::Event::TransferSuccess(
+			signer, to, 3,
+		)));
 	});
 }
 
@@ -218,6 +205,23 @@ fn set_risk_management_should_fail_when_freeze_account_has_set() {
 }
 
 #[test]
+fn safe_transfer_should_fail_when_transfer_value_is_larger_than_set_amount() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let to = Public::from_raw([1; 32]);
+
+		let amount_limit = TransferLimit::AmountLimit(1, 50);
+
+		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
+
+		assert_noop!(
+			DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
+			Error::<Test>::TransferValueTooLarge
+		);
+	});
+}
+
+#[test]
 fn safe_transfer_should_fail_when_transfer_times_is_more_than_set_times() {
 	new_test_ext().execute_with(|| {
 		let signer = Public::from_raw([0; 32]);
@@ -234,5 +238,34 @@ fn safe_transfer_should_fail_when_transfer_times_is_more_than_set_times() {
 			DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
 			Error::<Test>::TransferTimesTooMany
 		);
+	});
+}
+
+#[test]
+fn safe_transfer_should_fail_when_account_freeze_temporary() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let to = Public::from_raw([1; 32]);
+
+		let amount_limit = TransferLimit::AmountLimit(1, 50);
+
+		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
+
+		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
+
+		assert_ok!(DefenseModule::set_risk_management(
+			Origin::signed(signer),
+			freeze_account_for_some_time.clone()
+		));
+
+		// assert_noop!(
+		// 	DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
+		// 	Error::<Test>::AccountHasBeenFrozenTemporary
+		// );
+
+		// assert_noop!(
+		// 	DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
+		// 	Error::<Test>::AccountHasBeenFrozenTemporary
+		// );
 	});
 }
