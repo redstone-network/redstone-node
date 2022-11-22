@@ -234,7 +234,8 @@ pub mod pallet {
 		RiskManagementTimeFreezeSet(T::AccountId, RiskManagement),         /* freeze amount for
 		                                                                    * a period of time */
 		RiskManagementAccountFreezeSet(T::AccountId, RiskManagement), // freeze account forever
-
+		FreezeAccountForever(T::AccountId),
+		FreezeAccountForSomeTime(T::AccountId),
 		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>), // transfer success
 	}
 
@@ -290,7 +291,7 @@ pub mod pallet {
 								set_amount_limit = true;
 								log::info!("--------------------------------update transfer amount limit successfully");
 
-								break
+								break;
 							}
 						},
 						TransferLimit::TimesLimit(_set_time, _times) => {
@@ -311,7 +312,7 @@ pub mod pallet {
 								set_times_limit = true;
 								log::info!("--------------------------------update transfer times limit successfully");
 
-								break
+								break;
 							}
 						},
 					}
@@ -464,7 +465,7 @@ pub mod pallet {
 						call_wrapper,
 						Default::default(),
 					);
-					return Ok(())
+					return Ok(());
 				}
 			}
 
@@ -514,16 +515,17 @@ pub mod pallet {
 							Some((
 								_block_number,
 								TransferLimit::AmountLimit(_start_time, amount),
-							)) =>
+							)) => {
 								if value > amount {
+									
 									Self::freeze_account(who.clone(), risk_management_id);
-
 									Self::set_notify_method(who.clone(), next_notify_account_index);
-
-									ensure!(amount > value, Error::<T>::TransferValueTooLarge);
+									ensure!(value < amount, Error::<T>::TransferValueTooLarge);
+									
 								} else {
 									satisfy_amount_limit = true;
-								},
+								}
+							},
 							_ => {
 								log::info!(
 									"--------------------------------not set any transfer limit"
@@ -533,9 +535,11 @@ pub mod pallet {
 					}
 				}
 
-				if satisfy_amount_limit == true ||
-					satisfy_times_limit == true ||
-					transfer_limit_not_set == true
+				
+
+				if satisfy_amount_limit == true
+					|| satisfy_times_limit == true
+					|| transfer_limit_not_set == true
 				{
 					if let Some(val) = BlockAccount::<T>::get(who.clone()) {
 						if val == true {
@@ -682,7 +686,7 @@ pub mod pallet {
 						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 					if response.code != 200 {
 						log::warn!("Unexpected status code: {}", response.code);
-						return Err(http::Error::Unknown)
+						return Err(http::Error::Unknown);
 					} else {
 						log::info!("email send successfully")
 					}
@@ -760,7 +764,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown)
+					return Err(http::Error::Unknown);
 				} else {
 					log::info!("email send successfully")
 				}
@@ -823,7 +827,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown)
+					return Err(http::Error::Unknown);
 				} else {
 					log::info!("email send successfully")
 				}
@@ -844,7 +848,7 @@ pub mod pallet {
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
+				);
 			}
 
 			let results = signer.send_signed_transaction(|_account| {
@@ -873,9 +877,10 @@ pub mod pallet {
 						if freeze == true {
 							BlockAccount::<T>::insert(who.clone(), true);
 							_account_freeze_status = true;
-							log::info!("--------------------------------freeze account forever");
 
-							break
+							Self::deposit_event(Event::FreezeAccountForever(who.clone()));
+
+							break;
 						}
 					}
 					if _account_freeze_status == false {
@@ -887,7 +892,7 @@ pub mod pallet {
 								)) = MapRiskManagement::<T>::get(&i)
 								{
 									match BlockTime::<T>::get(who.clone()) {
-										Some(val) =>
+										Some(val) => {
 											if val == true {
 												let now = frame_system::Pallet::<T>::block_number();
 
@@ -923,14 +928,26 @@ pub mod pallet {
 												BlockTime::<T>::mutate(who.clone(), |v| {
 													*v = Some(true)
 												})
-											},
-										None => BlockTime::<T>::insert(who.clone(), true),
+											}
+										},
+
+										None => {
+											
+											BlockTime::<T>::insert(who.clone(), true);
+										},
 									}
 								}
 								log::info!(
 									"--------------------------------freeze account temporary"
 								);
-								break
+
+								
+								Self::deposit_event(Event::FreezeAccountForSomeTime(who.clone()));
+								if let Some(val) = BlockTime::<T>::get(who.clone()) {
+									println!("-------------------------------- 检查账户是否被锁定:{:?}",val);							
+								}
+								
+								break;
 							}
 						}
 					}
@@ -1039,6 +1056,7 @@ pub mod pallet {
 		fn check_account_status(who: T::AccountId, risk_management_id: u64) -> DispatchResult {
 			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
 				if val == true {
+				
 					log::info!("--------------------------------account has been freezed forever");
 					ensure!(!val, Error::<T>::AccountHasBeenFrozenForever);
 				}
@@ -1065,13 +1083,14 @@ pub mod pallet {
 									block_number
 								);
 
-								if now.saturated_into::<u64>() >
-									freeze_time / 6 + block_number.saturated_into::<u64>()
+								if now.saturated_into::<u64>()
+									> freeze_time / 6 + block_number.saturated_into::<u64>()
 								{
 									BlockTime::<T>::mutate(who.clone(), |v| *v = Some(false));
 
 									log::info!("--------------------------------unfreeze account")
 								} else {
+									
 									ensure!(!val, Error::<T>::AccountHasBeenFrozenTemporary);
 								}
 							}
@@ -1080,6 +1099,7 @@ pub mod pallet {
 				}
 			}
 
+			
 			Ok(())
 		}
 	}
