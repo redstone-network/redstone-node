@@ -1,5 +1,5 @@
 use super::*;
-use crate::mock::*;
+use crate::{mock::*, Error};
 
 use frame_support::{assert_noop, assert_ok};
 
@@ -9,8 +9,8 @@ use sp_core::sr25519::Public;
 #[test]
 fn set_transfer_limit_should_work() {
 	new_test_ext().execute_with(|| {
-		let amount_limit = TransferLimit::AmountLimit(1, 1000);
-		let times_limit = TransferLimit::TimesLimit(0, 5);
+		let amount_limit = TransferLimit::AmountLimit(1000);
+		let times_limit = TransferLimit::FrequencyLimit(5, 100);
 		let signer = Public::from_raw([0; 32]);
 
 		let block_number = System::block_number();
@@ -35,13 +35,13 @@ fn set_transfer_limit_should_work() {
 			signer,
 			amount_limit,
 		)));
-		System::assert_has_event(Event::DefenseModule(crate::Event::TransferTimesLimitSet(
+		System::assert_has_event(Event::DefenseModule(crate::Event::TransferFrequencyLimitSet(
 			signer,
 			times_limit,
 		)));
 
-		let update_amount_limit = TransferLimit::AmountLimit(1, 2000);
-		let update_times_limit = TransferLimit::TimesLimit(0, 10);
+		let update_amount_limit = TransferLimit::AmountLimit(2000);
+		let update_times_limit = TransferLimit::FrequencyLimit(10, 100);
 
 		// assert
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), update_amount_limit));
@@ -67,7 +67,7 @@ fn set_risk_management_should_work() {
 	new_test_ext().execute_with(|| {
 		let freeze = true;
 
-		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
+		let freeze_account_for_some_time = RiskManagement::TimeFreeze(120);
 		let freeze_account_forever = RiskManagement::AccountFreeze(freeze);
 		let signer = Public::from_raw([0; 32]);
 
@@ -125,8 +125,8 @@ fn safe_transfer_should_work() {
 		// assert
 		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 1));
 
-		let amount_limit = TransferLimit::AmountLimit(1, 1000);
-		let times_limit = TransferLimit::TimesLimit(0, 5);
+		let amount_limit = TransferLimit::AmountLimit(1000);
+		let times_limit = TransferLimit::FrequencyLimit(10, 1000);
 
 		// assert
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
@@ -148,14 +148,14 @@ fn safe_transfer_should_work() {
 fn set_risk_management_should_fail_when_freeze_time_has_set() {
 	new_test_ext().execute_with(|| {
 		let signer = Public::from_raw([0; 32]);
-		let mut freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
+		let mut freeze_account_for_some_time = RiskManagement::TimeFreeze(120);
 
 		assert_ok!(DefenseModule::set_risk_management(
 			Origin::signed(signer),
 			freeze_account_for_some_time.clone()
 		));
 
-		freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 60);
+		freeze_account_for_some_time = RiskManagement::TimeFreeze(240);
 
 		assert_noop!(
 			DefenseModule::set_risk_management(
@@ -196,7 +196,7 @@ fn safe_transfer_should_fail_when_transfer_value_is_larger_than_set_amount() {
 		let signer = Public::from_raw([0; 32]);
 		let to = Public::from_raw([1; 32]);
 
-		let amount_limit = TransferLimit::AmountLimit(1, 50);
+		let amount_limit = TransferLimit::AmountLimit(50);
 
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
 
@@ -213,7 +213,7 @@ fn safe_transfer_should_fail_when_transfer_times_is_more_than_set_times() {
 		let signer = Public::from_raw([0; 32]);
 		let to = Public::from_raw([1; 32]);
 
-		let times_limit = TransferLimit::TimesLimit(1, 3);
+		let times_limit = TransferLimit::FrequencyLimit(3, 100);
 
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), times_limit));
 		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 3));
@@ -233,11 +233,11 @@ fn safe_transfer_should_fail_when_account_freeze_temporary() {
 		let signer = Public::from_raw([0; 32]);
 		let to = Public::from_raw([1; 32]);
 
-		let amount_limit = TransferLimit::AmountLimit(1, 50);
+		let amount_limit = TransferLimit::AmountLimit(50);
 
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
 
-		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
+		let freeze_account_for_some_time = RiskManagement::TimeFreeze(120);
 
 		assert_ok!(DefenseModule::set_risk_management(
 			Origin::signed(signer),
@@ -246,7 +246,7 @@ fn safe_transfer_should_fail_when_account_freeze_temporary() {
 
 		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 60));
 
-		System::assert_has_event(Event::DefenseModule(crate::Event::FreezeAccountForSomeTime(
+		System::assert_has_event(Event::DefenseModule(crate::Event::FreezeAccountTemporary(
 			signer,
 		)));
 
@@ -263,11 +263,11 @@ fn safe_transfer_should_fail_when_account_freeze_forever() {
 		let signer = Public::from_raw([0; 32]);
 		let to = Public::from_raw([1; 32]);
 
-		let times_limit = TransferLimit::TimesLimit(1, 3);
+		let times_limit = TransferLimit::FrequencyLimit(3, 100);
 
 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), times_limit));
 
-		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
+		let freeze_account_for_some_time = RiskManagement::TimeFreeze(120);
 		let freeze_account_forever = RiskManagement::AccountFreeze(true);
 
 		assert_ok!(DefenseModule::set_risk_management(

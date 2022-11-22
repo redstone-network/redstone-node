@@ -79,16 +79,16 @@ pub mod crypto {
 /// there are two kind of predefined limitations
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum TransferLimit<Balance> {
-	AmountLimit(u64, Balance), // amount limit per transaction
-	TimesLimit(u64, u64),      // times limit per 100 blocks
+	AmountLimit(Balance),     // amount limit per transaction
+	FrequencyLimit(u64, u64), // the first parameter is amount limit, the second parameter is blocks limit
 }
 
 /// a enum to organize different protect actions  when illegal transactions occur
 /// there are two kind of predefined actions
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum RiskManagement {
-	TimeFreeze(u64, u64), // freeze account for a period of time
-	AccountFreeze(bool),  // freeze account forever
+	TimeFreeze(u64),     // freeze account for a period of time
+	AccountFreeze(bool), // freeze account forever
 }
 
 #[frame_support::pallet]
@@ -228,14 +228,14 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		TransferAmountLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>), // set amount limit
-		TransferTimesLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),  // set times limit
+		TransferFrequencyLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>), // set times limit
 		TransferAmountLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update amount limit
-		TransferTimesLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update times limit
+		TransferFrequencyLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update times limit
 		RiskManagementTimeFreezeSet(T::AccountId, RiskManagement),         /* freeze amount for
 		                                                                    * a period of time */
 		RiskManagementAccountFreezeSet(T::AccountId, RiskManagement), // freeze account forever
 		FreezeAccountForever(T::AccountId),
-		FreezeAccountForSomeTime(T::AccountId),
+		FreezeAccountTemporary(T::AccountId),
 		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>), // transfer success
 	}
 
@@ -272,8 +272,8 @@ pub mod pallet {
 			for i in 0..transfer_limit_id {
 				if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
 					match transfer_limit {
-						TransferLimit::AmountLimit(_set_time, _amount) => {
-							if let Some((_, TransferLimit::AmountLimit(_set_time, _set_times))) =
+						TransferLimit::AmountLimit(_amount) => {
+							if let Some((_, TransferLimit::AmountLimit(_set_times))) =
 								MapTransferLimit::<T>::get(i)
 							{
 								MapTransferLimit::<T>::mutate(&i, |v| {
@@ -294,9 +294,11 @@ pub mod pallet {
 								break;
 							}
 						},
-						TransferLimit::TimesLimit(_set_time, _times) => {
-							if let Some((_, TransferLimit::TimesLimit(_set_time, _set_times))) =
-								MapTransferLimit::<T>::get(i)
+						TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit) => {
+							if let Some((
+								_,
+								TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit),
+							)) = MapTransferLimit::<T>::get(i)
 							{
 								MapTransferLimit::<T>::mutate(&i, |v| {
 									*v = Some((
@@ -305,7 +307,7 @@ pub mod pallet {
 									))
 								});
 
-								Self::deposit_event(Event::TransferTimesLimitUpdated(
+								Self::deposit_event(Event::TransferFrequencyLimitUpdated(
 									who.clone(),
 									transfer_limit,
 								));
@@ -328,16 +330,16 @@ pub mod pallet {
 				NextTransferLimitId::<T>::put(transfer_limit_id.saturating_add(One::one()));
 
 				match transfer_limit {
-					TransferLimit::AmountLimit(_set_time, _amount) => {
+					TransferLimit::AmountLimit(_amount) => {
 						log::info!("--------------------------------set transfer amount limit");
 						Self::deposit_event(Event::TransferAmountLimitSet(
 							who.clone(),
 							transfer_limit,
 						));
 					},
-					TransferLimit::TimesLimit(_set_time, _times) => {
+					TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit) => {
 						log::info!("--------------------------------set transfer times limit");
-						Self::deposit_event(Event::TransferTimesLimitSet(
+						Self::deposit_event(Event::TransferFrequencyLimitSet(
 							who.clone(),
 							transfer_limit,
 						));
@@ -365,8 +367,8 @@ pub mod pallet {
 			for i in 0..risk_management_id {
 				if RiskManagementOwner::<T>::contains_key(&who, &i) == true {
 					match risk_management {
-						RiskManagement::TimeFreeze(_, _) => {
-							if let Some((_, RiskManagement::TimeFreeze(_, _))) =
+						RiskManagement::TimeFreeze(_) => {
+							if let Some((_, RiskManagement::TimeFreeze(_))) =
 								MapRiskManagement::<T>::get(&i)
 							{
 								freeze_time_set = true;
@@ -404,7 +406,7 @@ pub mod pallet {
 				NextRiskManagementId::<T>::put(risk_management_id.saturating_add(One::one()));
 
 				match risk_management {
-					RiskManagement::TimeFreeze(_, _) => {
+					RiskManagement::TimeFreeze(_) => {
 						log::info!("--------------------------------set freeze time");
 						Self::deposit_event(Event::RiskManagementTimeFreezeSet(
 							who.clone(),
@@ -440,7 +442,7 @@ pub mod pallet {
 			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
 
-			let result = Self::check_account_status(who.clone(), risk_management_id);
+			let result = Self::keep_account_status_or_unfreeze(who.clone(), risk_management_id);
 
 			match result {
 				1 => ensure!(result != 1, Error::<T>::AccountHasBeenFrozenForever),
@@ -491,11 +493,19 @@ pub mod pallet {
 						transfer_limit_not_set = false;
 
 						match MapTransferLimit::<T>::get(&i) {
-							Some((block_number, TransferLimit::TimesLimit(start_time, times))) => {
+							Some((
+								block_number,
+								TransferLimit::FrequencyLimit(
+									max_available_frequency,
+									blocks_limit,
+								),
+							)) => {
 								let now = frame_system::Pallet::<T>::block_number();
 
-								if now < block_number + 100u32.into() {
-									if times <= 0 {
+								if now.saturated_into::<u64>()
+									< block_number.saturated_into::<u64>() + blocks_limit
+								{
+									if max_available_frequency <= 0 {
 										let account_status =
 											Self::freeze_account(who.clone(), risk_management_id);
 
@@ -505,13 +515,19 @@ pub mod pallet {
 										);
 
 										if account_status == false {
-											ensure!(times > 0, Error::<T>::TransferTimesTooMany);
+											ensure!(
+												max_available_frequency > 0,
+												Error::<T>::TransferTimesTooMany
+											);
 										}
 									} else {
 										MapTransferLimit::<T>::mutate(&i, |v| {
 											*v = Some((
 												block_number,
-												TransferLimit::TimesLimit(start_time, times - 1),
+												TransferLimit::FrequencyLimit(
+													max_available_frequency - 1,
+													blocks_limit,
+												),
 											))
 										});
 
@@ -521,10 +537,7 @@ pub mod pallet {
 									satisfy_times_limit = true;
 								}
 							},
-							Some((
-								_block_number,
-								TransferLimit::AmountLimit(_start_time, amount),
-							)) => {
+							Some((_block_number, TransferLimit::AmountLimit(amount))) => {
 								if value > amount {
 									let account_status =
 										Self::freeze_account(who.clone(), risk_management_id);
@@ -899,10 +912,8 @@ pub mod pallet {
 			if account_freeze_status == false {
 				for i in 0..risk_management_id {
 					if RiskManagementOwner::<T>::contains_key(&who, &i) {
-						if let Some((
-							_block_number,
-							RiskManagement::TimeFreeze(set_time, freeze_time),
-						)) = MapRiskManagement::<T>::get(&i)
+						if let Some((_block_number, RiskManagement::TimeFreeze(freeze_time))) =
+							MapRiskManagement::<T>::get(&i)
 						{
 							match BlockTime::<T>::get(who.clone()) {
 								Some(val) => {
@@ -910,10 +921,8 @@ pub mod pallet {
 										let now = frame_system::Pallet::<T>::block_number();
 
 										MapRiskManagement::<T>::mutate(&i, |v| {
-											*v = Some((
-												now,
-												RiskManagement::TimeFreeze(set_time, freeze_time),
-											))
+											*v =
+												Some((now, RiskManagement::TimeFreeze(freeze_time)))
 										});
 
 										log::info!(
@@ -923,10 +932,8 @@ pub mod pallet {
 										let now = frame_system::Pallet::<T>::block_number();
 
 										MapRiskManagement::<T>::mutate(&i, |v| {
-											*v = Some((
-												now,
-												RiskManagement::TimeFreeze(set_time, freeze_time),
-											))
+											*v =
+												Some((now, RiskManagement::TimeFreeze(freeze_time)))
 										});
 
 										log::info!(
@@ -945,7 +952,7 @@ pub mod pallet {
 							}
 						}
 
-						Self::deposit_event(Event::FreezeAccountForSomeTime(who.clone()));
+						Self::deposit_event(Event::FreezeAccountTemporary(who.clone()));
 						if let Some(val) = BlockTime::<T>::get(who.clone()) {
 							if val {
 								account_freeze_status = true;
@@ -1058,7 +1065,7 @@ pub mod pallet {
 
 		/// check account status, if it's frozen forever, do nothing
 		/// if it's frozen temporarily,keep still or unfrozen account
-		fn check_account_status(who: T::AccountId, risk_management_id: u64) -> u32 {
+		fn keep_account_status_or_unfreeze(who: T::AccountId, risk_management_id: u64) -> u32 {
 			let mut account_status: u32 = 0;
 
 			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
@@ -1075,13 +1082,13 @@ pub mod pallet {
 							if RiskManagementOwner::<T>::contains_key(&who, &i) {
 								if let Some((
 									block_number,
-									RiskManagement::TimeFreeze(_start_time, freeze_time),
+									RiskManagement::TimeFreeze(freeze_time),
 								)) = MapRiskManagement::<T>::get(&i)
 								{
 									let now = frame_system::Pallet::<T>::block_number();
 
 									if now.saturated_into::<u64>()
-										> freeze_time / 6 + block_number.saturated_into::<u64>()
+										> freeze_time + block_number.saturated_into::<u64>()
 									{
 										BlockTime::<T>::mutate(who.clone(), |v| *v = Some(false));
 
@@ -1089,6 +1096,10 @@ pub mod pallet {
 											"--------------------------------unfreeze account"
 										)
 									} else {
+										log::info!(
+											"-------------------------------- freeze account will at {:?}",freeze_time + block_number.saturated_into::<u64>()
+										);
+
 										account_status = 2;
 									}
 								}
