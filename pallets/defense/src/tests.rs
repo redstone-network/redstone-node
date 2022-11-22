@@ -1,16 +1,10 @@
 use super::*;
 use crate::mock::*;
 
-use frame_support::{assert_noop, assert_ok, traits::ConstU32, BoundedVec};
-use frame_system::Call;
+use frame_support::{assert_noop, assert_ok};
 
-use mock::{Event, *};
-use sp_core::{
-	offchain::{testing, OffchainWorkerExt, TransactionPoolExt},
-	sr25519::{Public, Signature},
-};
-use sp_keystore::{testing::KeyStore, KeystoreExt};
-use std::sync::Arc;
+use mock::Event;
+use sp_core::sr25519::Public;
 
 #[test]
 fn set_transfer_limit_should_work() {
@@ -250,10 +244,11 @@ fn safe_transfer_should_fail_when_account_freeze_temporary() {
 			freeze_account_for_some_time.clone()
 		));
 
-		assert_noop!(
-			DefenseModule::safe_transfer(Origin::signed(signer), to, 60),
-			Error::<Test>::TransferValueTooLarge
-		);
+		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 60));
+
+		System::assert_has_event(Event::DefenseModule(crate::Event::FreezeAccountForSomeTime(
+			signer,
+		)));
 
 		assert_noop!(
 			DefenseModule::safe_transfer(Origin::signed(signer), to, 10),
@@ -262,95 +257,44 @@ fn safe_transfer_should_fail_when_account_freeze_temporary() {
 	});
 }
 
-// #[test]
-// fn safe_transfer_should_fail_when_account_freeze_forever() {
-// 	new_test_ext().execute_with(|| {
-// 		let signer = Public::from_raw([0; 32]);
-// 		let to = Public::from_raw([1; 32]);
+#[test]
+fn safe_transfer_should_fail_when_account_freeze_forever() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let to = Public::from_raw([1; 32]);
 
-// 		let amount_limit = TransferLimit::AmountLimit(1, 50);
+		let times_limit = TransferLimit::TimesLimit(1, 3);
 
-// 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
+		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), times_limit));
 
-// 		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
-// 		let freeze_account_forever = RiskManagement::AccountFreeze(true);
+		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
+		let freeze_account_forever = RiskManagement::AccountFreeze(true);
 
-// 		assert_ok!(DefenseModule::set_risk_management(
-// 			Origin::signed(signer),
-// 			freeze_account_for_some_time.clone()
-// 		));
+		assert_ok!(DefenseModule::set_risk_management(
+			Origin::signed(signer),
+			freeze_account_for_some_time.clone()
+		));
 
-// 		assert_ok!(DefenseModule::set_risk_management(
-// 			Origin::signed(signer),
-// 			freeze_account_forever.clone()
-// 		));
+		assert_ok!(DefenseModule::set_risk_management(
+			Origin::signed(signer),
+			freeze_account_forever.clone()
+		));
 
-// 		assert_noop!(
-// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
-// 			Error::<Test>::TransferTimesTooMany
-// 		);
+		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 3));
+		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 3));
+		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 3));
 
-// 		assert_noop!(
-// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 10),
-// 			Error::<Test>::AccountHasBeenFrozenForever
-// 		);
-// 	});
-// }
+		System::assert_has_event(Event::DefenseModule(crate::Event::TransferSuccess(
+			signer, to, 3,
+		)));
 
-// #[test]
-// fn safe_transfer_should_fail_when_permission_taken_account_disapproved() {
-// 	new_test_ext().execute_with(|| {
-// 		let signer = Public::from_raw([0; 32]);
-// 		let to = Public::from_raw([1; 32]);
+		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 3));
 
-// 		let amount_limit = TransferLimit::AmountLimit(1, 50);
+		System::assert_has_event(Event::DefenseModule(crate::Event::FreezeAccountForever(signer)));
 
-// 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
-
-// 		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
-
-// 		assert_ok!(DefenseModule::set_risk_management(
-// 			Origin::signed(signer),
-// 			freeze_account_for_some_time.clone()
-// 		));
-
-// 		assert_noop!(
-// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
-// 			Error::<Test>::TransferValueTooLarge
-// 		);
-
-// 		assert_noop!(
-// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 10),
-// 			Error::<Test>::PermissionTakenAccountCallMustBeApproved
-// 		);
-// 	});
-// }
-
-// #[test]
-// fn safe_transfer_should_fail_when_permission_taken_account_pending() {
-// 	new_test_ext().execute_with(|| {
-// 		let signer = Public::from_raw([0; 32]);
-// 		let to = Public::from_raw([1; 32]);
-
-// 		let amount_limit = TransferLimit::AmountLimit(1, 50);
-
-// 		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
-
-// 		let freeze_account_for_some_time = RiskManagement::TimeFreeze(1, 120);
-
-// 		assert_ok!(DefenseModule::set_risk_management(
-// 			Origin::signed(signer),
-// 			freeze_account_for_some_time.clone()
-// 		));
-
-// 		assert_noop!(
-// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 51),
-// 			Error::<Test>::TransferValueTooLarge
-// 		);
-
-// 		assert_noop!(
-// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 10),
-// 			Error::<Test>::AccountHasBeenFrozenTemporary
-// 		);
-// 	});
-// }
+		assert_noop!(
+			DefenseModule::safe_transfer(Origin::signed(signer), to, 3),
+			Error::<Test>::AccountHasBeenFrozenForever
+		);
+	});
+}
