@@ -32,7 +32,7 @@ pub enum Triger<Balance> {
 	PriceGT(u64, u64),  //insert_time_millis_seconds,  price   //todo,price use float
 	PriceLT(u64, u64),  //insert_time_millis_seconds,  price   //todo,price use float
 	TransferProtect(u64, Balance, u64), /* limit amout per transfer, transfer count limit per
-						* 100 blocks */
+	                     * 100 blocks */
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
