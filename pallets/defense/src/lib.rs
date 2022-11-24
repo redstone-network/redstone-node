@@ -233,6 +233,8 @@ pub mod pallet {
 	/// events which indicate that users' call execute fail
 	#[pallet::error]
 	pub enum Error<T> {
+		TransferAmountLimitHasSet,
+		TransferFrequencyLimitHasSet,
 		FreezeTimeHasSet,    // set account freeze time duplicate
 		FreezeAccountHasSet, // set freeze account duplicate
 		TransferValueTooLarge, /* transfer amount reach out transfer amount
@@ -259,14 +261,19 @@ pub mod pallet {
 			match transfer_limit {
 				TransferLimit::AmountLimit(_amount) => {
 					if TransferLimitOwner::<T>::contains_key(&who, 1) == true {
-						TransferLimitOwner::<T>::mutate(&who, 1, |v| {
-							*v = Some(transfer_limit.clone())
-						});
-						Self::deposit_event(Event::TransferAmountLimitUpdated(
-							who.clone(),
-							transfer_limit,
-						));
-						log::info!("--------------------------------update transfer amount limit successfully");
+						// TransferLimitOwner::<T>::mutate(&who, 1, |v| {
+						// 	*v = Some(transfer_limit.clone())
+						// });
+						// Self::deposit_event(Event::TransferAmountLimitUpdated(
+						// 	who.clone(),
+						// 	transfer_limit,
+						// ));
+						// log::info!("--------------------------------update transfer amount limit
+						// successfully");
+						ensure!(
+							!TransferLimitOwner::<T>::contains_key(&who, 1),
+							Error::<T>::TransferAmountLimitHasSet
+						);
 					} else {
 						TransferLimitOwner::<T>::insert(&who, 1, transfer_limit.clone());
 						Self::deposit_event(Event::TransferAmountLimitSet(
@@ -278,21 +285,26 @@ pub mod pallet {
 				},
 				TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit) =>
 					if TransferLimitOwner::<T>::contains_key(&who, 2) == true {
-						TransferLimitOwner::<T>::mutate(&who, 2, |v| {
-							*v = Some(transfer_limit.clone())
-						});
+						// TransferLimitOwner::<T>::mutate(&who, 2, |v| {
+						// 	*v = Some(transfer_limit.clone())
+						// });
 
-						MapFrequencyLimit::<T>::mutate(&who, |v| {
-							*v = Some((
-								frame_system::Pallet::<T>::block_number(),
-								transfer_limit.clone(),
-							))
-						});
-						Self::deposit_event(Event::TransferFrequencyLimitUpdated(
-							who.clone(),
-							transfer_limit,
-						));
-						log::info!("--------------------------------update transfer times limit successfully");
+						// MapFrequencyLimit::<T>::mutate(&who, |v| {
+						// 	*v = Some((
+						// 		frame_system::Pallet::<T>::block_number(),
+						// 		transfer_limit.clone(),
+						// 	))
+						// });
+						// Self::deposit_event(Event::TransferFrequencyLimitUpdated(
+						// 	who.clone(),
+						// 	transfer_limit,
+						// ));
+						// log::info!("--------------------------------update transfer times limit
+						// successfully");
+						ensure!(
+							!TransferLimitOwner::<T>::contains_key(&who, 2),
+							Error::<T>::TransferFrequencyLimitHasSet
+						)
 					} else {
 						TransferLimitOwner::<T>::insert(&who, 2, transfer_limit.clone());
 						MapFrequencyLimit::<T>::insert(

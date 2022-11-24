@@ -30,22 +30,6 @@ fn set_transfer_limit_should_work() {
 			signer,
 			frequency_limit,
 		)));
-
-		let update_amount_limit = TransferLimit::AmountLimit(2000);
-		let update_frequency_limit = TransferLimit::FrequencyLimit(10, 100);
-
-		// assert
-		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), update_amount_limit));
-		// assert successful events
-
-		assert_ok!(DefenseModule::set_transfer_limit(
-			Origin::signed(signer),
-			update_frequency_limit
-		));
-
-		// assert transfer limit owner
-		assert_eq!(TransferLimitOwner::<Test>::get(signer, 1), Some(update_amount_limit));
-		assert_eq!(TransferLimitOwner::<Test>::get(signer, 2), Some(update_frequency_limit));
 	});
 }
 
@@ -111,6 +95,41 @@ fn safe_transfer_should_work() {
 		// System::assert_has_event(Event::DefenseModule(crate::Event::TransferSuccess(
 		// 	signer, to, 3,
 		// )));
+	});
+}
+
+#[test]
+fn set_transfer_limit_should_fail_when_amount_limit_has_set() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+		let amount_limit = TransferLimit::AmountLimit(1000);
+		let update_amount_limit = TransferLimit::AmountLimit(2000);
+
+		// assert
+		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), amount_limit));
+
+		assert_noop!(
+			DefenseModule::set_transfer_limit(Origin::signed(signer), update_amount_limit),
+			Error::<Test>::TransferAmountLimitHasSet
+		);
+	});
+}
+
+#[test]
+fn set_transfer_limit_should_fail_when_frequency_limit_has_set() {
+	new_test_ext().execute_with(|| {
+		let signer = Public::from_raw([0; 32]);
+
+		let frequency_limit = TransferLimit::FrequencyLimit(5, 100);
+		let update_frequency_limit = TransferLimit::FrequencyLimit(100, 100);
+
+		// assert
+		assert_ok!(DefenseModule::set_transfer_limit(Origin::signed(signer), frequency_limit));
+
+		assert_noop!(
+			DefenseModule::set_transfer_limit(Origin::signed(signer), update_frequency_limit),
+			Error::<Test>::TransferFrequencyLimitHasSet
+		);
 	});
 }
 
