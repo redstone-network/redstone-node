@@ -227,14 +227,14 @@ pub mod pallet {
 				Error::<T>::ProposalAlreadyCreated
 			);
 
-			let next_proposal_id = NextProposalId::<T>::get().unwrap_or_default();
+			let proposal_id = NextProposalId::<T>::get().unwrap_or_default();
 
 			let active_capture = ActiveCapture {
 				created: <frame_system::Pallet<T>>::block_number(),
 				friends_approve: Default::default(),
 				friends_cancel: Default::default(),
 
-				execute_proposal_id: next_proposal_id,
+				execute_proposal_id: proposal_id,
 				cancel_proposal_id: Default::default(),
 				capture_statue: CaptureStatue::Processing,
 			};
@@ -252,10 +252,10 @@ pub mod pallet {
 				statue: ProposalStatue::Processing,
 			};
 
-			Proposals::<T>::insert(next_proposal_id, proposal);
-			NextProposalId::<T>::set(Some(next_proposal_id.saturating_add(One::one())));
+			Proposals::<T>::insert(proposal_id, proposal);
+			NextProposalId::<T>::set(Some(proposal_id.saturating_add(One::one())));
 
-			Self::deposit_event(Event::NewCapture(next_proposal_id, account, who));
+			Self::deposit_event(Event::NewCapture(proposal_id, account, who));
 
 			Ok(())
 		}
@@ -276,11 +276,11 @@ pub mod pallet {
 			let active_capture = Self::active_capture(&account).ok_or(Error::<T>::NotStarted)?;
 			ensure!(capture_config.friends.contains(&who), Error::<T>::MustProposalByFriends);
 
-			let next_proposal_id = NextProposalId::<T>::get().unwrap_or_default();
+			let proposal_id = NextProposalId::<T>::get().unwrap_or_default();
 
 			<ActiveCaptures<T>>::insert(
 				&account,
-				ActiveCapture { cancel_proposal_id: Some(next_proposal_id), ..active_capture },
+				ActiveCapture { cancel_proposal_id: Some(proposal_id), ..active_capture },
 			);
 
 			let proposal = Proposal {
@@ -294,10 +294,10 @@ pub mod pallet {
 				statue: ProposalStatue::Processing,
 			};
 
-			Proposals::<T>::insert(next_proposal_id, proposal);
-			NextProposalId::<T>::set(Some(next_proposal_id.saturating_add(One::one())));
+			Proposals::<T>::insert(proposal_id, proposal);
+			NextProposalId::<T>::set(Some(proposal_id.saturating_add(One::one())));
 
-			Self::deposit_event(Event::NewCancelCapture(next_proposal_id, account, who));
+			Self::deposit_event(Event::NewCancelCapture(proposal_id, account, who));
 
 			Ok(())
 		}
