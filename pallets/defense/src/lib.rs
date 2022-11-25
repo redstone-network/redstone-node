@@ -79,16 +79,17 @@ pub mod crypto {
 /// there are two kind of predefined limitations
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum TransferLimit<Balance> {
-	AmountLimit(u64, Balance), // amount limit per transaction
-	TimesLimit(u64, u64),      // times limit per 100 blocks
+	AmountLimit(Balance), // amount limit per transaction
+	FrequencyLimit(u64, u64), /* the first parameter is times limit, the second parameter is
+	                       * blocks limit */
 }
 
 /// a enum to organize different protect actions  when illegal transactions occur
 /// there are two kind of predefined actions
 #[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum RiskManagement {
-	TimeFreeze(u64, u64), // freeze account for a period of time
-	AccountFreeze(bool),  // freeze account forever
+	TimeFreeze(u64),     // freeze account for a period of time
+	AccountFreeze(bool), // freeze account forever
 }
 
 #[frame_support::pallet]
@@ -143,15 +144,15 @@ pub mod pallet {
 
 	/// store transfer limit
 	#[pallet::storage]
-	#[pallet::getter(fn transfer_limit_map)]
-	pub(super) type MapTransferLimit<T: Config> =
-		StorageMap<_, Twox64Concat, u64, (T::BlockNumber, TransferLimit<BalanceOf<T>>)>;
+	#[pallet::getter(fn transfer_frequency_limit_map)]
+	pub(super) type MapFrequencyLimit<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, (T::BlockNumber, TransferLimit<BalanceOf<T>>)>;
 
-	/// store risk management
+	/// store transfer limit
 	#[pallet::storage]
-	#[pallet::getter(fn risk_management_map)]
-	pub(super) type MapRiskManagement<T: Config> =
-		StorageMap<_, Twox64Concat, u64, (T::BlockNumber, RiskManagement)>;
+	#[pallet::getter(fn freeze_account_temporary_map)]
+	pub(super) type MapFreezeAccountTemporary<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, (T::BlockNumber, RiskManagement)>;
 
 	/// storage owner,id of transfer limit instance
 	#[pallet::storage]
@@ -178,16 +179,6 @@ pub mod pallet {
 		RiskManagement,
 		OptionQuery,
 	>;
-
-	/// store next id of transfer limit instance
-	#[pallet::storage]
-	#[pallet::getter(fn next_transfer_limit_id)]
-	pub type NextTransferLimitId<T: Config> = StorageValue<_, u64>;
-
-	/// store next id of risk management instance
-	#[pallet::storage]
-	#[pallet::getter(fn next_risk_management_id)]
-	pub type NextRiskManagementId<T: Config> = StorageValue<_, u64>;
 
 	/// store account block status
 	#[pallet::storage]
@@ -228,20 +219,22 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		TransferAmountLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>), // set amount limit
-		TransferTimesLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>),  // set times limit
+		TransferFrequencyLimitSet(T::AccountId, TransferLimit<BalanceOf<T>>), // set times limit
 		TransferAmountLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update amount limit
-		TransferTimesLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update times limit
+		TransferFrequencyLimitUpdated(T::AccountId, TransferLimit<BalanceOf<T>>), // update times limit
 		RiskManagementTimeFreezeSet(T::AccountId, RiskManagement),         /* freeze amount for
 		                                                                    * a period of time */
 		RiskManagementAccountFreezeSet(T::AccountId, RiskManagement), // freeze account forever
 		FreezeAccountForever(T::AccountId),
-		FreezeAccountForSomeTime(T::AccountId),
+		FreezeAccountTemporary(T::AccountId),
 		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>), // transfer success
 	}
 
 	/// events which indicate that users' call execute fail
 	#[pallet::error]
 	pub enum Error<T> {
+		TransferAmountLimitHasSet,
+		TransferFrequencyLimitHasSet,
 		FreezeTimeHasSet,    // set account freeze time duplicate
 		FreezeAccountHasSet, // set freeze account duplicate
 		TransferValueTooLarge, /* transfer amount reach out transfer amount
@@ -264,87 +257,43 @@ pub mod pallet {
 			transfer_limit: TransferLimit<BalanceOf<T>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
 
-			let mut set_amount_limit = false;
-			let mut set_times_limit = false;
-
-			for i in 0..transfer_limit_id {
-				if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
-					match transfer_limit {
-						TransferLimit::AmountLimit(_set_time, _amount) => {
-							if let Some((_, TransferLimit::AmountLimit(_set_time, _set_times))) =
-								MapTransferLimit::<T>::get(i)
-							{
-								MapTransferLimit::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										transfer_limit.clone(),
-									))
-								});
-
-								Self::deposit_event(Event::TransferAmountLimitUpdated(
-									who.clone(),
-									transfer_limit,
-								));
-
-								set_amount_limit = true;
-								log::info!("--------------------------------update transfer amount limit successfully");
-
-								break;
-							}
-						},
-						TransferLimit::TimesLimit(_set_time, _times) => {
-							if let Some((_, TransferLimit::TimesLimit(_set_time, _set_times))) =
-								MapTransferLimit::<T>::get(i)
-							{
-								MapTransferLimit::<T>::mutate(&i, |v| {
-									*v = Some((
-										frame_system::Pallet::<T>::block_number(),
-										transfer_limit.clone(),
-									))
-								});
-
-								Self::deposit_event(Event::TransferTimesLimitUpdated(
-									who.clone(),
-									transfer_limit,
-								));
-								set_times_limit = true;
-								log::info!("--------------------------------update transfer times limit successfully");
-
-								break;
-							}
-						},
-					}
-				}
-			}
-
-			if set_times_limit == false && set_amount_limit == false {
-				MapTransferLimit::<T>::insert(
-					transfer_limit_id,
-					(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
-				);
-				TransferLimitOwner::<T>::insert(&who, transfer_limit_id, transfer_limit.clone());
-				NextTransferLimitId::<T>::put(transfer_limit_id.saturating_add(One::one()));
-
-				match transfer_limit {
-					TransferLimit::AmountLimit(_set_time, _amount) => {
-						log::info!("--------------------------------set transfer amount limit");
+			match transfer_limit {
+				TransferLimit::AmountLimit(_amount) => {
+					if TransferLimitOwner::<T>::contains_key(&who, 1) == true {
+						ensure!(
+							!TransferLimitOwner::<T>::contains_key(&who, 1),
+							Error::<T>::TransferAmountLimitHasSet
+						);
+					} else {
+						TransferLimitOwner::<T>::insert(&who, 1, transfer_limit.clone());
 						Self::deposit_event(Event::TransferAmountLimitSet(
 							who.clone(),
 							transfer_limit,
 						));
-					},
-					TransferLimit::TimesLimit(_set_time, _times) => {
-						log::info!("--------------------------------set transfer times limit");
-						Self::deposit_event(Event::TransferTimesLimitSet(
+						log::info!("--------------------------------set transfer amount limit");
+					}
+				},
+				TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit) =>
+					if TransferLimitOwner::<T>::contains_key(&who, 2) == true {
+						ensure!(
+							!TransferLimitOwner::<T>::contains_key(&who, 2),
+							Error::<T>::TransferFrequencyLimitHasSet
+						)
+					} else {
+						TransferLimitOwner::<T>::insert(&who, 2, transfer_limit.clone());
+						MapFrequencyLimit::<T>::insert(
+							&who,
+							(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
+						);
+						Self::deposit_event(Event::TransferFrequencyLimitSet(
 							who.clone(),
 							transfer_limit,
 						));
-					},
-				}
-			}
 
+						log::info!("--------------------------------set transfer times limit");
+					},
+			}
 			Ok(())
 		}
 
@@ -357,70 +306,39 @@ pub mod pallet {
 			risk_management: RiskManagement,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
 
-			let mut freeze_time_set = false;
-			let mut freeze_account_set = false;
+			match risk_management {
+				RiskManagement::TimeFreeze(_freeze_time) => {
+					ensure!(
+						!RiskManagementOwner::<T>::contains_key(&who, 1),
+						Error::<T>::FreezeTimeHasSet
+					);
+					RiskManagementOwner::<T>::insert(&who, 1, risk_management.clone());
+					MapFreezeAccountTemporary::<T>::insert(
+						&who,
+						(frame_system::Pallet::<T>::block_number(), risk_management.clone()),
+					);
 
-			for i in 0..risk_management_id {
-				if RiskManagementOwner::<T>::contains_key(&who, &i) == true {
-					match risk_management {
-						RiskManagement::TimeFreeze(_, _) => {
-							if let Some((_, RiskManagement::TimeFreeze(_, _))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								freeze_time_set = true;
-								log::info!("--------------------------------freeze time has set");
-								ensure!(
-									!MapRiskManagement::<T>::contains_key(&i),
-									Error::<T>::FreezeTimeHasSet
-								);
-							}
-						},
-						RiskManagement::AccountFreeze(_) => {
-							if let Some((_, RiskManagement::AccountFreeze(_))) =
-								MapRiskManagement::<T>::get(&i)
-							{
-								freeze_account_set = true;
-								log::info!(
-									"--------------------------------freeze account has set"
-								);
-								ensure!(
-									!MapRiskManagement::<T>::contains_key(&i),
-									Error::<T>::FreezeAccountHasSet
-								);
-							}
-						},
-					}
-				}
+					Self::deposit_event(Event::RiskManagementTimeFreezeSet(
+						who.clone(),
+						risk_management.clone(),
+					));
+					log::info!("--------------------------------set freeze time");
+				},
+				RiskManagement::AccountFreeze(_is_freeze) => {
+					ensure!(
+						!RiskManagementOwner::<T>::contains_key(&who, 2),
+						Error::<T>::FreezeAccountHasSet
+					);
+					RiskManagementOwner::<T>::insert(&who, 2, risk_management.clone());
+
+					Self::deposit_event(Event::RiskManagementAccountFreezeSet(
+						who.clone(),
+						risk_management.clone(),
+					));
+					log::info!("--------------------------------set freeze account");
+				},
 			}
-
-			if freeze_time_set == false && freeze_account_set == false {
-				MapRiskManagement::<T>::insert(
-					risk_management_id,
-					(frame_system::Pallet::<T>::block_number(), risk_management.clone()),
-				);
-				RiskManagementOwner::<T>::insert(&who, risk_management_id, risk_management.clone());
-				NextRiskManagementId::<T>::put(risk_management_id.saturating_add(One::one()));
-
-				match risk_management {
-					RiskManagement::TimeFreeze(_, _) => {
-						log::info!("--------------------------------set freeze time");
-						Self::deposit_event(Event::RiskManagementTimeFreezeSet(
-							who.clone(),
-							risk_management.clone(),
-						));
-					},
-					RiskManagement::AccountFreeze(_) => {
-						log::info!("--------------------------------set freeze account");
-						Self::deposit_event(Event::RiskManagementAccountFreezeSet(
-							who.clone(),
-							risk_management.clone(),
-						));
-					},
-				}
-			}
-
 			Ok(())
 		}
 
@@ -436,11 +354,12 @@ pub mod pallet {
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
-			let transfer_limit_id = NextTransferLimitId::<T>::get().unwrap_or_default();
-			let risk_management_id = NextRiskManagementId::<T>::get().unwrap_or_default();
+			let mut account_is_frozen = false;
+			let mut time_is_frozen = false;
+
 			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
 
-			let result = Self::check_account_status(who.clone(), risk_management_id);
+			let result = Self::keep_account_status_or_unfreeze(who.clone());
 
 			match result {
 				1 => ensure!(result != 1, Error::<T>::AccountHasBeenFrozenForever),
@@ -471,103 +390,64 @@ pub mod pallet {
 						call_wrapper,
 						Default::default(),
 					);
-					return Ok(());
+					return Ok(())
 				}
 			}
 
-			if transfer_limit_id == 0 {
-				log::info!("--------------------------------not set any transfer limit");
+			if let Some(TransferLimit::AmountLimit(amount)) = TransferLimitOwner::<T>::get(&who, 1)
+			{
+				if value > amount {
+					let account_status = Self::freeze_account(who.clone());
+					Self::set_notify_method(who.clone(), next_notify_account_index);
+
+					if !account_status {
+						ensure!(value < amount, Error::<T>::TransferValueTooLarge);
+					}
+				}
+			}
+
+			if let Some(TransferLimit::FrequencyLimit(frequency, block_numbers)) =
+				TransferLimitOwner::<T>::get(&who, 2)
+			{
+				if frequency <= 0 {
+					let account_status = Self::freeze_account(who.clone());
+					Self::set_notify_method(who.clone(), next_notify_account_index);
+
+					if !account_status {
+						ensure!(frequency > 0, Error::<T>::TransferTimesTooMany);
+					}
+				} else {
+					TransferLimitOwner::<T>::mutate(&who, 2, |v| {
+						*v = Some(TransferLimit::FrequencyLimit(frequency - 1, block_numbers))
+					});
+				}
+			}
+
+			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
+				if val == true {
+					account_is_frozen = true;
+					log::info!(
+						"-------------------------------check block account again {:?}",
+						account_is_frozen
+					);
+				}
+			}
+			if let Some(val) = BlockTime::<T>::get(who.clone()) {
+				if val == true {
+					time_is_frozen = true;
+					log::info!(
+						"-------------------------------check block time again {:?} ",
+						time_is_frozen
+					);
+				}
+			}
+
+			if account_is_frozen || time_is_frozen {
+				log::info!("-------------------------------transfer failed");
+			} else {
 				T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
 				Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
 				log::info!("-------------------------------transfer successfully");
-			} else {
-				let mut satisfy_times_limit = false;
-				let mut satisfy_amount_limit = false;
-
-				let mut transfer_limit_not_set = true;
-
-				for i in 0..transfer_limit_id {
-					if TransferLimitOwner::<T>::contains_key(&who, &i) == true {
-						transfer_limit_not_set = false;
-
-						match MapTransferLimit::<T>::get(&i) {
-							Some((block_number, TransferLimit::TimesLimit(start_time, times))) => {
-								let now = frame_system::Pallet::<T>::block_number();
-
-								if now < block_number + 100u32.into() {
-									if times <= 0 {
-										let account_status =
-											Self::freeze_account(who.clone(), risk_management_id);
-
-										Self::set_notify_method(
-											who.clone(),
-											next_notify_account_index,
-										);
-
-										if account_status == false {
-											ensure!(times > 0, Error::<T>::TransferTimesTooMany);
-										}
-									} else {
-										MapTransferLimit::<T>::mutate(&i, |v| {
-											*v = Some((
-												block_number,
-												TransferLimit::TimesLimit(start_time, times - 1),
-											))
-										});
-
-										satisfy_times_limit = true;
-									}
-								} else {
-									satisfy_times_limit = true;
-								}
-							},
-							Some((
-								_block_number,
-								TransferLimit::AmountLimit(_start_time, amount),
-							)) => {
-								if value > amount {
-									let account_status =
-										Self::freeze_account(who.clone(), risk_management_id);
-									Self::set_notify_method(who.clone(), next_notify_account_index);
-
-									if account_status == false {
-										ensure!(value < amount, Error::<T>::TransferValueTooLarge);
-									}
-								} else {
-									satisfy_amount_limit = true;
-								}
-							},
-							_ => {
-								log::info!(
-									"--------------------------------not set any transfer limit"
-								);
-							},
-						}
-					}
-				}
-
-				if satisfy_amount_limit == true
-					|| satisfy_times_limit == true
-					|| transfer_limit_not_set == true
-				{
-					if let Some(val) = BlockAccount::<T>::get(who.clone()) {
-						if val == true {
-							log::info!("-------------------------------check block account again");
-							ensure!(!val, Error::<T>::AccountHasBeenFrozenForever);
-						}
-					}
-					if let Some(val) = BlockTime::<T>::get(who.clone()) {
-						if val == true {
-							log::info!("-------------------------------check block time again ");
-
-							ensure!(!val, Error::<T>::AccountHasBeenFrozenTemporary);
-						}
-					}
-
-					T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
-					Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
-					log::info!("-------------------------------transfer successfully");
-				}
 			}
 
 			Ok(())
@@ -696,7 +576,7 @@ pub mod pallet {
 						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 					if response.code != 200 {
 						log::warn!("Unexpected status code: {}", response.code);
-						return Err(http::Error::Unknown);
+						return Err(http::Error::Unknown)
 					} else {
 						log::info!("email send successfully")
 					}
@@ -774,7 +654,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown);
+					return Err(http::Error::Unknown)
 				} else {
 					log::info!("email send successfully")
 				}
@@ -837,7 +717,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown);
+					return Err(http::Error::Unknown)
 				} else {
 					log::info!("email send successfully")
 				}
@@ -858,7 +738,7 @@ pub mod pallet {
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				);
+				)
 			}
 
 			let results = signer.send_signed_transaction(|_account| {
@@ -876,84 +756,51 @@ pub mod pallet {
 		}
 
 		/// a helper function to freeze account according to different protect actions
-		fn freeze_account(who: T::AccountId, risk_management_id: u64) -> bool {
+		fn freeze_account(who: T::AccountId) -> bool {
 			let mut account_freeze_status = false;
 
-			for j in 0..risk_management_id {
-				if RiskManagementOwner::<T>::contains_key(&who, &j) {
-					if let Some((_, RiskManagement::AccountFreeze(freeze))) =
-						MapRiskManagement::<T>::get(&j)
-					{
-						if freeze == true {
-							BlockAccount::<T>::insert(who.clone(), true);
-							account_freeze_status = true;
+			if let Some(RiskManagement::AccountFreeze(account_need_freeze)) =
+				RiskManagementOwner::<T>::get(&who, 2)
+			{
+				if account_need_freeze {
+					BlockAccount::<T>::insert(who.clone(), true);
+					account_freeze_status = true;
 
-							Self::deposit_event(Event::FreezeAccountForever(who.clone()));
-							log::info!("--------------------------------freeze account forever");
-
-							break;
-						}
-					}
+					Self::deposit_event(Event::FreezeAccountForever(who.clone()));
+					log::info!("--------------------------------freeze account forever");
 				}
 			}
 			if account_freeze_status == false {
-				for i in 0..risk_management_id {
-					if RiskManagementOwner::<T>::contains_key(&who, &i) {
-						if let Some((
-							_block_number,
-							RiskManagement::TimeFreeze(set_time, freeze_time),
-						)) = MapRiskManagement::<T>::get(&i)
-						{
-							match BlockTime::<T>::get(who.clone()) {
-								Some(val) => {
-									if val == true {
-										let now = frame_system::Pallet::<T>::block_number();
+				if let Some(time_freeze) = RiskManagementOwner::<T>::get(&who, 1) {
+					MapFreezeAccountTemporary::<T>::insert(
+						&who,
+						(frame_system::Pallet::<T>::block_number(), time_freeze.clone()),
+					);
 
-										MapRiskManagement::<T>::mutate(&i, |v| {
-											*v = Some((
-												now,
-												RiskManagement::TimeFreeze(set_time, freeze_time),
-											))
-										});
-
-										log::info!(
-											"--------------------------------update block start block_number {:?}",now
-										);
-									} else {
-										let now = frame_system::Pallet::<T>::block_number();
-
-										MapRiskManagement::<T>::mutate(&i, |v| {
-											*v = Some((
-												now,
-												RiskManagement::TimeFreeze(set_time, freeze_time),
-											))
-										});
-
-										log::info!(
-											"--------------------------------update block start block_number {:?}",now
-										);
-										BlockTime::<T>::mutate(who.clone(), |v| *v = Some(true))
-									}
-								},
-
-								None => {
-									BlockTime::<T>::insert(who.clone(), true);
-									log::info!(
-										"--------------------------------freeze account temporary"
-									);
-								},
-							}
-						}
-
-						Self::deposit_event(Event::FreezeAccountForSomeTime(who.clone()));
-						if let Some(val) = BlockTime::<T>::get(who.clone()) {
-							if val {
-								account_freeze_status = true;
-							}
-						}
-
-						break;
+					if let Some((_, transfer_limit)) = MapFrequencyLimit::<T>::get(&who) {
+						MapFrequencyLimit::<T>::mutate(&who, |v| {
+							*v = Some((
+								frame_system::Pallet::<T>::block_number(),
+								transfer_limit.clone(),
+							))
+						});
 					}
+
+					match BlockTime::<T>::get(&who) {
+						Some(account_status) =>
+							if account_status == false {
+								BlockTime::<T>::mutate(who.clone(), |v| *v = Some(true));
+							},
+						None => {
+							BlockTime::<T>::insert(who.clone(), true);
+						},
+					}
+
+					account_freeze_status = true;
+					Self::deposit_event(Event::FreezeAccountTemporary(who.clone()));
+					log::info!(
+						"--------------------------------freeze account temporary and update start block_number: {:?}",frame_system::Pallet::<T>::block_number()
+					);
 				}
 			}
 
@@ -1058,7 +905,7 @@ pub mod pallet {
 
 		/// check account status, if it's frozen forever, do nothing
 		/// if it's frozen temporarily,keep still or unfrozen account
-		fn check_account_status(who: T::AccountId, risk_management_id: u64) -> u32 {
+		fn keep_account_status_or_unfreeze(who: T::AccountId) -> u32 {
 			let mut account_status: u32 = 0;
 
 			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
@@ -1071,33 +918,84 @@ pub mod pallet {
 			if account_status == 0 {
 				if let Some(val) = BlockTime::<T>::get(who.clone()) {
 					if val == true {
-						for i in 0..risk_management_id {
-							if RiskManagementOwner::<T>::contains_key(&who, &i) {
-								if let Some((
-									block_number,
-									RiskManagement::TimeFreeze(_start_time, freeze_time),
-								)) = MapRiskManagement::<T>::get(&i)
-								{
-									let now = frame_system::Pallet::<T>::block_number();
-
-									if now.saturated_into::<u64>()
-										> freeze_time / 6 + block_number.saturated_into::<u64>()
-									{
-										BlockTime::<T>::mutate(who.clone(), |v| *v = Some(false));
-
-										log::info!(
-											"--------------------------------unfreeze account"
-										)
-									} else {
-										account_status = 2;
-									}
-								}
+						if Self::check_amount_condition(who.clone()) &&
+							Self::check_frequency_condition(who.clone())
+						{
+							BlockTime::<T>::mutate(&who, |v| *v = Some(false));
+							if let Some((
+								_times_limit_block_number,
+								TransferLimit::FrequencyLimit(frequency, block_numbers),
+							)) = MapFrequencyLimit::<T>::get(&who)
+							{
+								TransferLimitOwner::<T>::mutate(&who, 2, |v| {
+									*v = Some(TransferLimit::FrequencyLimit(
+										frequency,
+										block_numbers,
+									))
+								});
 							}
+						} else {
+							account_status = 2;
+							log::info!("--------------------------------account has been freezed temporary");
 						}
 					}
 				}
 			}
 			account_status
+		}
+
+		fn check_amount_condition(who: T::AccountId) -> bool {
+			let mut account_should_unfreeze = false;
+			match MapFreezeAccountTemporary::<T>::get(&who) {
+				Some((block_number, risk_management)) => {
+					if let RiskManagement::TimeFreeze(freeze_time) = risk_management {
+						let now = frame_system::Pallet::<T>::block_number();
+
+						if now.saturated_into::<u64>() >
+							freeze_time + block_number.saturated_into::<u64>()
+						{
+							account_should_unfreeze = true;
+						} else {
+							log::info!(
+								"-------------------------------- freeze account will at {:?}",
+								freeze_time + block_number.saturated_into::<u64>()
+							);
+						}
+					}
+				},
+				None => {
+					account_should_unfreeze = true;
+				},
+			}
+
+			account_should_unfreeze
+		}
+
+		fn check_frequency_condition(who: T::AccountId) -> bool {
+			let mut account_should_unfreeze = false;
+
+			match MapFrequencyLimit::<T>::get(&who) {
+				Some((times_limit_block_number, transfer_limit)) =>
+					if let TransferLimit::FrequencyLimit(_frequency, block_numbers) = transfer_limit
+					{
+						let now = frame_system::Pallet::<T>::block_number();
+						if now.saturated_into::<u64>() >
+							block_numbers + times_limit_block_number.saturated_into::<u64>()
+						{
+							account_should_unfreeze = true;
+						} else {
+							log::info!(
+								"-------------------------------- freeze account will at {:?}",
+								block_numbers + times_limit_block_number.saturated_into::<u64>()
+							);
+						}
+					},
+				None => {
+					account_should_unfreeze = true;
+				},
+			}
+
+			account_should_unfreeze
 		}
 	}
 }
