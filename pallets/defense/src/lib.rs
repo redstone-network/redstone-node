@@ -491,7 +491,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// a function to allow user to freeze his account directly without
+		/// a function to allow user to freeze his account directly
 		/// when account is frozen, all transaction in the future will fail
 		/// account owner needs to recover this account
 
@@ -981,7 +981,7 @@ pub mod pallet {
 		}
 
 		/// check account status, if it's frozen forever, do nothing
-		/// if it's frozen temporarily,keep still or unfrozen account
+		/// if it's frozen temporarily,keep still or unfreeze account
 		fn check_account_status(who: T::AccountId) -> u32 {
 			let mut account_status: u32 = 0;
 
@@ -1032,10 +1032,12 @@ pub mod pallet {
 			account_status
 		}
 
+		/// unfreeze account
 		fn unfreeze_account_temporary(who: T::AccountId) {
 			BlockTime::<T>::mutate(&who, |v| *v = Some(false));
 		}
 
+		/// unfreeze account
 		fn unfreeze_account_temporary_default(who: T::AccountId) {
 			DefaultFreeze::<T>::mutate(&who, |v| *v = Some(false));
 		}
