@@ -495,10 +495,12 @@ pub mod pallet {
 		/// when sending finished, resending flag will be set false
 
 		#[pallet::weight(10_000)]
-		pub fn freeze_account(origin: OriginFor<T>) -> DispatchResult {
+		pub fn freeze_account(origin: OriginFor<T>, freeze: bool) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			Self::freeze_account_forever(who.clone());
-			Self::deposit_event(Event::FreezeAccountSuccess(who.clone()));
+			if freeze {
+				Self::freeze_account_forever(who.clone());
+				Self::deposit_event(Event::FreezeAccountSuccess(who.clone()));
+			}
 
 			Ok(())
 		}

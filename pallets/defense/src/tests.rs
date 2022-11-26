@@ -283,7 +283,7 @@ fn freeze_account_should_work() {
 	new_test_ext().execute_with(|| {
 		let signer = Public::from_raw([0; 32]);
 
-		assert_ok!(DefenseModule::freeze_account(Origin::signed(signer)));
+		assert_ok!(DefenseModule::freeze_account(Origin::signed(signer), true));
 
 		assert_eq!(BlockAccount::<Test>::get(signer), Some(true));
 
