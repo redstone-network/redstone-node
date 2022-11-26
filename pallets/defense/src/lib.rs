@@ -154,7 +154,7 @@ pub mod pallet {
 	pub(super) type MapFreezeAccountTemporary<T: Config> =
 		StorageMap<_, Twox64Concat, T::AccountId, (T::BlockNumber, RiskManagement)>;
 
-	/// store transfer limit
+	/// store default freeze config
 	#[pallet::storage]
 	#[pallet::getter(fn default_freeze_account_temporary_map)]
 	pub(super) type DefaultFreezeAccountTemporary<T: Config> =
@@ -491,8 +491,9 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// notification will be send only one time
-		/// when sending finished, resending flag will be set false
+		/// a function to allow user to freeze his account directly without
+		/// when account is frozen, all transaction in the future will fail
+		/// account owner needs to recover this account
 
 		#[pallet::weight(10_000)]
 		pub fn freeze_account(origin: OriginFor<T>, freeze: bool) -> DispatchResult {
@@ -1039,6 +1040,7 @@ pub mod pallet {
 			DefaultFreeze::<T>::mutate(&who, |v| *v = Some(false));
 		}
 
+		/// a function to restore frequency limit config, including available frequency and start block height
 		fn reset_frequency_limit_config(who: T::AccountId, frequency: u64) {
 			if let Some((
 				_times_limit_block_number,
@@ -1060,6 +1062,7 @@ pub mod pallet {
 			}
 		}
 
+		/// a function to check account status, when account satisfies the condition od releasing, return true
 		fn check_amount_condition(who: T::AccountId) -> bool {
 			let mut account_should_unfreeze = false;
 			match MapFreezeAccountTemporary::<T>::get(&who) {
