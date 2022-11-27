@@ -154,6 +154,12 @@ pub mod pallet {
 	pub(super) type MapFreezeAccountTemporary<T: Config> =
 		StorageMap<_, Twox64Concat, T::AccountId, (T::BlockNumber, RiskManagement)>;
 
+	/// store default freeze config
+	#[pallet::storage]
+	#[pallet::getter(fn default_freeze_account_temporary_map)]
+	pub(super) type DefaultFreezeAccountTemporary<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, (T::BlockNumber, u64)>;
+
 	/// storage owner,id of transfer limit instance
 	#[pallet::storage]
 	#[pallet::getter(fn transfer_limit_owner)]
@@ -189,6 +195,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn block_time)]
 	pub type BlockTime<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
+
+	/// store account default freeze
+	#[pallet::storage]
+	#[pallet::getter(fn default_freeze)]
+	pub type DefaultFreeze<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn next_account_index)]
@@ -228,6 +239,7 @@ pub mod pallet {
 		FreezeAccountForever(T::AccountId),
 		FreezeAccountTemporary(T::AccountId),
 		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>), // transfer success
+		FreezeAccountSuccess(T::AccountId),
 	}
 
 	/// events which indicate that users' call execute fail
@@ -274,7 +286,7 @@ pub mod pallet {
 						log::info!("--------------------------------set transfer amount limit");
 					}
 				},
-				TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit) =>
+				TransferLimit::FrequencyLimit(_max_available_amount, _blocks_limit) => {
 					if TransferLimitOwner::<T>::contains_key(&who, 2) == true {
 						ensure!(
 							!TransferLimitOwner::<T>::contains_key(&who, 2),
@@ -292,7 +304,8 @@ pub mod pallet {
 						));
 
 						log::info!("--------------------------------set transfer times limit");
-					},
+					}
+				},
 			}
 			Ok(())
 		}
@@ -356,10 +369,11 @@ pub mod pallet {
 
 			let mut account_is_frozen = false;
 			let mut time_is_frozen = false;
+			let mut default_freeze_status = false;
 
 			let next_notify_account_index = NextNotifyAccountIndex::<T>::get().unwrap_or_default();
 
-			let result = Self::keep_account_status_or_unfreeze(who.clone());
+			let result = Self::check_account_status(who.clone());
 
 			match result {
 				1 => ensure!(result != 1, Error::<T>::AccountHasBeenFrozenForever),
@@ -390,19 +404,19 @@ pub mod pallet {
 						call_wrapper,
 						Default::default(),
 					);
-					return Ok(())
+					return Ok(());
 				}
 			}
 
 			if let Some(TransferLimit::AmountLimit(amount)) = TransferLimitOwner::<T>::get(&who, 1)
 			{
 				if value > amount {
-					let account_status = Self::freeze_account(who.clone());
+					let _account_status = Self::check_risk_management_config(who.clone());
 					Self::set_notify_method(who.clone(), next_notify_account_index);
 
-					if !account_status {
-						ensure!(value < amount, Error::<T>::TransferValueTooLarge);
-					}
+					// if !account_status {
+					// 	ensure!(value < amount, Error::<T>::TransferValueTooLarge);
+					// }
 				}
 			}
 
@@ -410,16 +424,31 @@ pub mod pallet {
 				TransferLimitOwner::<T>::get(&who, 2)
 			{
 				if frequency <= 0 {
-					let account_status = Self::freeze_account(who.clone());
+					let _account_status = Self::check_risk_management_config(who.clone());
 					Self::set_notify_method(who.clone(), next_notify_account_index);
 
-					if !account_status {
-						ensure!(frequency > 0, Error::<T>::TransferTimesTooMany);
-					}
+				// if !account_status {
+				// 	ensure!(frequency > 0, Error::<T>::TransferTimesTooMany);
+				// }
 				} else {
-					TransferLimitOwner::<T>::mutate(&who, 2, |v| {
-						*v = Some(TransferLimit::FrequencyLimit(frequency - 1, block_numbers))
-					});
+					if let Some((block_number, TransferLimit::FrequencyLimit(fre, blocks))) =
+						MapFrequencyLimit::<T>::get(who.clone())
+					{
+						let now = frame_system::Pallet::<T>::block_number();
+
+						if now.saturated_into::<u64>()
+							> blocks + block_number.saturated_into::<u64>()
+						{
+							Self::reset_frequency_limit_config(who.clone(), fre - 1);
+						} else {
+							TransferLimitOwner::<T>::mutate(&who, 2, |v| {
+								*v = Some(TransferLimit::FrequencyLimit(
+									frequency - 1,
+									block_numbers,
+								))
+							});
+						}
+					}
 				}
 			}
 
@@ -441,13 +470,37 @@ pub mod pallet {
 					);
 				}
 			}
+			if let Some(val) = DefaultFreeze::<T>::get(who.clone()) {
+				if val == true {
+					default_freeze_status = true;
+					log::info!(
+						"-------------------------------check default freeze again {:?} ",
+						default_freeze_status
+					);
+				}
+			}
 
-			if account_is_frozen || time_is_frozen {
+			if account_is_frozen || time_is_frozen || default_freeze_status {
 				log::info!("-------------------------------transfer failed");
 			} else {
 				T::Currency::transfer(&who, &to, value, ExistenceRequirement::AllowDeath)?;
 				Self::deposit_event(Event::TransferSuccess(who.clone(), to.clone(), value));
 				log::info!("-------------------------------transfer successfully");
+			}
+
+			Ok(())
+		}
+
+		/// a function to allow user to freeze his account directly
+		/// when account is frozen, all transaction in the future will fail
+		/// account owner needs to recover this account
+
+		#[pallet::weight(10_000)]
+		pub fn freeze_account(origin: OriginFor<T>, freeze: bool) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			if freeze {
+				Self::freeze_account_forever(who.clone());
+				Self::deposit_event(Event::FreezeAccountSuccess(who.clone()));
 			}
 
 			Ok(())
@@ -576,7 +629,7 @@ pub mod pallet {
 						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 					if response.code != 200 {
 						log::warn!("Unexpected status code: {}", response.code);
-						return Err(http::Error::Unknown)
+						return Err(http::Error::Unknown);
 					} else {
 						log::info!("email send successfully")
 					}
@@ -654,7 +707,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown)
+					return Err(http::Error::Unknown);
 				} else {
 					log::info!("email send successfully")
 				}
@@ -717,7 +770,7 @@ pub mod pallet {
 					pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 				if response.code != 200 {
 					log::warn!("Unexpected status code: {}", response.code);
-					return Err(http::Error::Unknown)
+					return Err(http::Error::Unknown);
 				} else {
 					log::info!("email send successfully")
 				}
@@ -738,7 +791,7 @@ pub mod pallet {
 			if !signer.can_sign() {
 				return Err(
 					"No local accounts available. Consider adding one via `author_insertKey` RPC.",
-				)
+				);
 			}
 
 			let results = signer.send_signed_transaction(|_account| {
@@ -756,55 +809,79 @@ pub mod pallet {
 		}
 
 		/// a helper function to freeze account according to different protect actions
-		fn freeze_account(who: T::AccountId) -> bool {
+		fn check_risk_management_config(who: T::AccountId) -> bool {
 			let mut account_freeze_status = false;
 
 			if let Some(RiskManagement::AccountFreeze(account_need_freeze)) =
 				RiskManagementOwner::<T>::get(&who, 2)
 			{
 				if account_need_freeze {
-					BlockAccount::<T>::insert(who.clone(), true);
+					Self::freeze_account_forever(who.clone());
 					account_freeze_status = true;
-
-					Self::deposit_event(Event::FreezeAccountForever(who.clone()));
-					log::info!("--------------------------------freeze account forever");
 				}
 			}
 			if account_freeze_status == false {
-				if let Some(time_freeze) = RiskManagementOwner::<T>::get(&who, 1) {
-					MapFreezeAccountTemporary::<T>::insert(
-						&who,
-						(frame_system::Pallet::<T>::block_number(), time_freeze.clone()),
-					);
-
-					if let Some((_, transfer_limit)) = MapFrequencyLimit::<T>::get(&who) {
-						MapFrequencyLimit::<T>::mutate(&who, |v| {
-							*v = Some((
-								frame_system::Pallet::<T>::block_number(),
-								transfer_limit.clone(),
-							))
-						});
-					}
-
-					match BlockTime::<T>::get(&who) {
-						Some(account_status) =>
-							if account_status == false {
-								BlockTime::<T>::mutate(who.clone(), |v| *v = Some(true));
-							},
-						None => {
-							BlockTime::<T>::insert(who.clone(), true);
-						},
-					}
-
+				if let Some(freeze_time_config) = RiskManagementOwner::<T>::get(&who, 1) {
+					Self::freeze_account_temporary(who.clone(), freeze_time_config);
 					account_freeze_status = true;
-					Self::deposit_event(Event::FreezeAccountTemporary(who.clone()));
-					log::info!(
-						"--------------------------------freeze account temporary and update start block_number: {:?}",frame_system::Pallet::<T>::block_number()
-					);
 				}
 			}
 
+			if account_freeze_status == false {
+				Self::default_freeze_account(who.clone());
+				account_freeze_status = true;
+			}
+
 			account_freeze_status
+		}
+
+		fn freeze_account_forever(who: T::AccountId) {
+			BlockAccount::<T>::insert(who.clone(), true);
+
+			Self::deposit_event(Event::FreezeAccountForever(who.clone()));
+			log::info!("--------------------------------freeze account forever");
+		}
+
+		fn freeze_account_temporary(who: T::AccountId, freeze_time_config: RiskManagement) {
+			match BlockTime::<T>::get(&who) {
+				Some(account_status) => {
+					if account_status == false {
+						BlockTime::<T>::mutate(who.clone(), |v| *v = Some(true));
+					}
+				},
+				None => {
+					BlockTime::<T>::insert(who.clone(), true);
+				},
+			}
+
+			Self::deposit_event(Event::FreezeAccountTemporary(who.clone()));
+			log::info!("--------------------------------freeze account temporary");
+			Self::update_freeze_start_time(who.clone(), freeze_time_config)
+		}
+
+		fn default_freeze_account(who: T::AccountId) {
+			match DefaultFreeze::<T>::get(who.clone()) {
+				Some(_val) => DefaultFreeze::<T>::mutate(&who, |v| *v = Some(true)),
+				None => {
+					DefaultFreeze::<T>::insert(&who, true);
+				},
+			}
+			match DefaultFreezeAccountTemporary::<T>::get(who.clone()) {
+				Some(_) => DefaultFreezeAccountTemporary::<T>::mutate(&who, |v| {
+					*v = Some((frame_system::Pallet::<T>::block_number(), 100));
+				}),
+				None => DefaultFreezeAccountTemporary::<T>::insert(
+					&who,
+					(frame_system::Pallet::<T>::block_number(), 100),
+				),
+			}
+		}
+
+		fn update_freeze_start_time(who: T::AccountId, freeze_time_config: RiskManagement) {
+			// reset freeze start time
+			MapFreezeAccountTemporary::<T>::mutate(&who, |v| {
+				*v = Some((frame_system::Pallet::<T>::block_number(), freeze_time_config.clone()))
+			});
 		}
 
 		/// set notify method such as email,discord and slack
@@ -904,8 +981,8 @@ pub mod pallet {
 		}
 
 		/// check account status, if it's frozen forever, do nothing
-		/// if it's frozen temporarily,keep still or unfrozen account
-		fn keep_account_status_or_unfreeze(who: T::AccountId) -> u32 {
+		/// if it's frozen temporarily,keep still or unfreeze account
+		fn check_account_status(who: T::AccountId) -> u32 {
 			let mut account_status: u32 = 0;
 
 			if let Some(val) = BlockAccount::<T>::get(who.clone()) {
@@ -918,25 +995,36 @@ pub mod pallet {
 			if account_status == 0 {
 				if let Some(val) = BlockTime::<T>::get(who.clone()) {
 					if val == true {
-						if Self::check_amount_condition(who.clone()) &&
-							Self::check_frequency_condition(who.clone())
-						{
-							BlockTime::<T>::mutate(&who, |v| *v = Some(false));
-							if let Some((
-								_times_limit_block_number,
-								TransferLimit::FrequencyLimit(frequency, block_numbers),
-							)) = MapFrequencyLimit::<T>::get(&who)
-							{
-								TransferLimitOwner::<T>::mutate(&who, 2, |v| {
-									*v = Some(TransferLimit::FrequencyLimit(
-										frequency,
-										block_numbers,
-									))
-								});
-							}
+						if Self::check_amount_condition(who.clone()) {
+							Self::unfreeze_account_temporary(who.clone());
+							log::info!("--------------------------------account has been unfrozen");
 						} else {
 							account_status = 2;
-							log::info!("--------------------------------account has been freezed temporary");
+							log::info!(
+								"--------------------------------account has been frozen temporary"
+							);
+						}
+					}
+				}
+			}
+			if account_status == 0 {
+				if let Some(val) = DefaultFreeze::<T>::get(who.clone()) {
+					if val == true {
+						if let Some((block_number, blocks)) =
+							DefaultFreezeAccountTemporary::<T>::get(who.clone())
+						{
+							let now = frame_system::Pallet::<T>::block_number();
+
+							if now.saturated_into::<u64>()
+								> blocks + block_number.saturated_into::<u64>()
+							{
+								Self::unfreeze_account_temporary_default(who.clone());
+							} else {
+								account_status = 2;
+								log::info!(
+								"--------------------------------account has been frozen default"
+							);
+							}
 						}
 					}
 				}
@@ -944,6 +1032,39 @@ pub mod pallet {
 			account_status
 		}
 
+		/// unfreeze account
+		fn unfreeze_account_temporary(who: T::AccountId) {
+			BlockTime::<T>::mutate(&who, |v| *v = Some(false));
+		}
+
+		/// unfreeze account
+		fn unfreeze_account_temporary_default(who: T::AccountId) {
+			DefaultFreeze::<T>::mutate(&who, |v| *v = Some(false));
+		}
+
+		/// a function to restore frequency limit config, including available frequency and start block height
+		fn reset_frequency_limit_config(who: T::AccountId, frequency: u64) {
+			if let Some((
+				_times_limit_block_number,
+				TransferLimit::FrequencyLimit(_frequency, block_numbers),
+			)) = MapFrequencyLimit::<T>::get(&who)
+			{
+				// reset available frequency
+				TransferLimitOwner::<T>::mutate(&who, 2, |v| {
+					*v = Some(TransferLimit::FrequencyLimit(frequency, block_numbers))
+				});
+
+				// reset start block numbers
+				MapFrequencyLimit::<T>::mutate(&who, |v| {
+					*v = Some((
+						frame_system::Pallet::<T>::block_number(),
+						TransferLimit::FrequencyLimit(frequency, block_numbers).clone(),
+					))
+				});
+			}
+		}
+
+		/// a function to check account status, when account satisfies the condition od releasing, return true
 		fn check_amount_condition(who: T::AccountId) -> bool {
 			let mut account_should_unfreeze = false;
 			match MapFreezeAccountTemporary::<T>::get(&who) {
@@ -951,8 +1072,8 @@ pub mod pallet {
 					if let RiskManagement::TimeFreeze(freeze_time) = risk_management {
 						let now = frame_system::Pallet::<T>::block_number();
 
-						if now.saturated_into::<u64>() >
-							freeze_time + block_number.saturated_into::<u64>()
+						if now.saturated_into::<u64>()
+							> freeze_time + block_number.saturated_into::<u64>()
 						{
 							account_should_unfreeze = true;
 						} else {
@@ -963,33 +1084,6 @@ pub mod pallet {
 						}
 					}
 				},
-				None => {
-					account_should_unfreeze = true;
-				},
-			}
-
-			account_should_unfreeze
-		}
-
-		fn check_frequency_condition(who: T::AccountId) -> bool {
-			let mut account_should_unfreeze = false;
-
-			match MapFrequencyLimit::<T>::get(&who) {
-				Some((times_limit_block_number, transfer_limit)) =>
-					if let TransferLimit::FrequencyLimit(_frequency, block_numbers) = transfer_limit
-					{
-						let now = frame_system::Pallet::<T>::block_number();
-						if now.saturated_into::<u64>() >
-							block_numbers + times_limit_block_number.saturated_into::<u64>()
-						{
-							account_should_unfreeze = true;
-						} else {
-							log::info!(
-								"-------------------------------- freeze account will at {:?}",
-								block_numbers + times_limit_block_number.saturated_into::<u64>()
-							);
-						}
-					},
 				None => {
 					account_should_unfreeze = true;
 				},
