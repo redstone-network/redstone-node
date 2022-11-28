@@ -80,14 +80,19 @@ impl pallet_balances::Config for Test {
 	type WeightInfo = ();
 }
 
+parameter_types! {
+	pub const UnsignedPriority: u64 = 1;
+}
+
 impl pallet_defense::Config for Test {
 	type Event = Event;
 	type Currency = Balances;
-	type AuthorityId = pallet_defense::crypto::OcwAuthId;
+	type AuthorityId = pallet_defense::crypto::TestAuthId;
 	type Call = Call;
 	type CustomCallInterface = CustomCall;
 	type PermissionCaptureInterface = PermissionCaptureModule;
 	type Notification = NotificationModule;
+	type UnsignedPriority = UnsignedPriority;
 }
 
 type Extrinsic = TestXt<Call, ()>;

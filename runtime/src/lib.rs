@@ -1196,11 +1196,12 @@ impl CustomCallInterface<AccountId, u128> for CustomCall {
 impl pallet_defense::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
-	type AuthorityId = pallet_defense::crypto::OcwAuthId;
+	type AuthorityId = pallet_defense::crypto::TestAuthId;
 	type PermissionCaptureInterface = PermissionCapture;
 	type Call = Call;
 	type CustomCallInterface = CustomCall;
 	type Notification = Notification;
+	type UnsignedPriority = UnsignedPriority;
 }
 
 parameter_types! {
