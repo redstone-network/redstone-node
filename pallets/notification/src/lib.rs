@@ -71,7 +71,7 @@ pub mod pallet {
 		/// - `receiver`: the email receiver
 		/// - `title`: the email title
 		/// - `body`:  the email body
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn set_mail(
 			origin: OriginFor<T>,
 			receiver: Vec<u8>,
@@ -112,7 +112,7 @@ pub mod pallet {
 		///
 		/// - `hook_url`: the slack hook_url
 		/// - `message`: the slack message
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn set_slack(
 			origin: OriginFor<T>,
 			hook_url: Vec<u8>,
@@ -143,7 +143,7 @@ pub mod pallet {
 		/// - `hook_url`: the discord hook_url
 		/// - `user`: the discord user name
 		/// - `content`: the discord message content
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn set_discord(
 			origin: OriginFor<T>,
 			hook_url: Vec<u8>,

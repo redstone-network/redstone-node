@@ -212,7 +212,7 @@ pub mod pallet {
 		/// friends create a get account permission proposal
 		///
 		/// - `account`: the permission owner
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
 		pub fn create_get_account_permissions(
 			origin: OriginFor<T>,  //friends
 			account: T::AccountId, //capture owner
@@ -263,7 +263,7 @@ pub mod pallet {
 		/// friends cancel a get account permission proposal
 		///
 		/// - `account`: the permission owner
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
 		pub fn cancel_get_account_permissions(
 			origin: OriginFor<T>,  //friends
 			account: T::AccountId, //capture owner
@@ -307,7 +307,7 @@ pub mod pallet {
 		///
 		/// - `proposal_id`: the proposal id
 		/// - `_vote`: the vote type, 0: approve, 1:  deny, current default is 0.
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(3,2))]
 		pub fn vote(
 			origin: OriginFor<T>, //friends
 			proposal_id: u64,     //proposal id
@@ -411,7 +411,7 @@ pub mod pallet {
 		///
 		/// - `friends`: the permission owner's friends
 		/// - `threshold`: the permission threshold to execute
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn create_capture_config(
 			origin: OriginFor<T>, //capture owner
 			friends: Vec<T::AccountId>,
@@ -437,7 +437,7 @@ pub mod pallet {
 		/// - `account`: the permission owner
 		/// - `hash`: the call hash of permission
 		/// - `vote`: the vote type, 0: approve, 1:  deny,
-		#[pallet::weight(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(2,1))]
 		pub fn operational_voting(
 			origin: OriginFor<T>, //friends
 			account: T::AccountId,
