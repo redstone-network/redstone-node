@@ -88,6 +88,15 @@ Now you can launch node again:
 ./target/release/redstone-node --base-path /tmp/redstone --chain redstone-testnet
 ```
 
+## Run in Docker
+
+Install Docker first, then run the following command to start a node, and finally access it through port 9944:
+
+```
+docker pull baidang201/redstone-node:latest
+docker run --network host baidang201/redstone-node:latest /usr/local/bin/substrate --dev --rpc-cors all --rpc-methods=unsafe --rpc-external --unsafe-ws-external --unsafe-rpc-external
+```
+
 ## Run Tests
 
 
