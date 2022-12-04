@@ -86,6 +86,10 @@ impl CustomCallInterface<AccountId, u128> for CustomCall {
 	}
 }
 
+parameter_types! {
+	pub const UnsignedPriority: u64 = 1;
+}
+
 impl pallet_defense::Config for Test {
 	type Event = Event;
 	type Call = Call;
@@ -94,6 +98,7 @@ impl pallet_defense::Config for Test {
 	type PermissionCaptureInterface = PermissionCaptureModule;
 	type CustomCallInterface = CustomCall;
 	type Notification = NotificationModule;
+	type UnsignedPriority = UnsignedPriority;
 }
 
 parameter_types! {
