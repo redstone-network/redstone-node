@@ -534,7 +534,8 @@ pub mod pallet {
 			let _who = ensure_none(origin)?;
 
 			log::info!(
-				"-------------------------------- get payload {:?}",notification_sent_payload
+				"-------------------------------- get payload {:?}",
+				notification_sent_payload
 			);
 
 			if notification_sent_payload.mail_is_send {
@@ -549,7 +550,7 @@ pub mod pallet {
 					}
 				}
 			}
-			
+
 			if notification_sent_payload.slack_is_send {
 				if let Some(val) = SlackStatus::<T>::get(notification_sent_payload.account.clone())
 				{
@@ -564,7 +565,6 @@ pub mod pallet {
 					}
 				}
 			}
-
 
 			if notification_sent_payload.discord_is_send {
 				if let Some(val) =
@@ -582,7 +582,6 @@ pub mod pallet {
 				}
 			}
 
-			
 			let mut mail_status = false;
 			let mut slack_status = false;
 			let mut discord_status = false;
@@ -603,7 +602,7 @@ pub mod pallet {
 				}
 			}
 
-			if  mail_status || slack_status || discord_status {
+			if mail_status || slack_status || discord_status {
 				log::info!(
 					"--------------------------------  mail_status {:?},  slack_status {:?},discord_status {:?}",mail_status,slack_status,discord_status
 				);
@@ -654,7 +653,6 @@ pub mod pallet {
 		fn send_email_info(account: T::AccountId) -> Result<u64, http::Error> {
 			if let Some(val) = MailStatus::<T>::get(account.clone()) {
 				if val == true {
-					
 					match T::Notification::get_mail_config_action(account) {
 						Some(Action::MailWithToken(_, _, receiver, title, message_body)) => {
 							let to_email = match scale_info::prelude::string::String::from_utf8(

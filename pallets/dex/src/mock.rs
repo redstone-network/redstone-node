@@ -26,7 +26,7 @@ use frame_support::{
 	traits::{ConstU32, ConstU64, Everything, Nothing},
 };
 use frame_system::EnsureSignedBy;
-use orml_traits::{parameter_type_with_key, MultiReservableCurrency};
+use orml_traits::{parameter_type_with_key, MultiReservableCurrency, TransferProtectInterface};
 use primitives::{Amount, TokenSymbol};
 use sp_core::H256;
 use sp_runtime::{testing::Header, traits::IdentityLookup};
@@ -87,6 +87,17 @@ parameter_type_with_key! {
 	};
 }
 
+pub struct TestTransferProtect;
+
+impl TransferProtectInterface<Balance> for TestTransferProtect {
+	fn get_amout_limit() -> Balance {
+		Default::default()
+	}
+	fn get_tx_block_limit() -> u64 {
+		100u64
+	}
+}
+
 impl orml_tokens::Config for Runtime {
 	type Event = Event;
 	type Balance = Balance;
@@ -101,6 +112,7 @@ impl orml_tokens::Config for Runtime {
 	type DustRemovalWhitelist = Nothing;
 	type OnNewTokenAccount = ();
 	type OnKilledTokenAccount = ();
+	type TransferProtectInterface = TestTransferProtect;
 }
 
 pub struct MockDEXIncentives;
@@ -158,7 +170,7 @@ impl Config for Runtime {
 	type Erc20InfoMapping = MockErc20InfoMapping;
 	type WeightInfo = ();
 	type DEXIncentives = MockDEXIncentives;
-	type ListingOrigin = EnsureSignedBy<ListingOrigin, AccountId>;
+	//type ListingOrigin = EnsureSignedBy<ListingOrigin, AccountId>;
 	type ExtendedProvisioningBlocks = ConstU64<2000>;
 	type OnLiquidityPoolUpdated = MockOnLiquidityPoolUpdated;
 }

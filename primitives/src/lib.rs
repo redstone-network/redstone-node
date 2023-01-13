@@ -118,6 +118,9 @@ pub type Multiplier = FixedU128;
 /// Index of a transaction in the chain.
 pub type Index = u32;
 
+/// Digest item type.
+pub type DigestItem = generic::DigestItem;
+
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, PartialOrd, Ord, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum AuthoritysOriginId {
