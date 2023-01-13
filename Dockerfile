@@ -2,8 +2,8 @@
 # This is the build stage for Substrate. Here we create the binary.
 FROM docker.io/paritytech/ci-linux:production as builder
 
-WORKDIR /substrate
-COPY . /substrate
+WORKDIR /redstone-node
+COPY . /redstone-node
 RUN git submodule update --init --recursive
 RUN git submodule sync --recursive
 RUN git submodule update --init --recursive
@@ -19,17 +19,17 @@ LABEL description="Multistage Docker image for Substrate: a platform for web3" \
 	io.parity.image.source="https://github.com/paritytech/polkadot/blob/${VCS_REF}/docker/substrate_builder.Dockerfile" \
 	io.parity.image.documentation="https://github.com/paritytech/polkadot/"
 
-COPY --from=builder /substrate/target/release/substrate /usr/local/bin
+COPY --from=builder /redstone-node/target/release/redstone-node /usr/local/bin
 
-RUN useradd -m -u 1000 -U -s /bin/sh -d /substrate substrate && \
-	mkdir -p /data /substrate/.local/share/substrate && \
-	chown -R substrate:substrate /data && \
-	ln -s /data /substrate/.local/share/substrate && \
+RUN useradd -m -u 1000 -U -s /bin/sh -d /redstone-node redstone-node && \
+	mkdir -p /data /redstone-node/.local/share/redstone-node && \
+	chown -R redstone-node:redstone-node /data && \
+	ln -s /data /redstone-node/.local/share/redstone-node && \
 # unclutter and minimize the attack surface
 	rm -rf /usr/bin /usr/sbin && \
 # Sanity checks
-	/usr/local/bin/substrate --version
+	/usr/local/bin/redstone-node --version
 
-USER substrate
+USER redstone-node
 EXPOSE 30333 9933 9944 9615
 VOLUME ["/data"]

@@ -7,14 +7,14 @@ services:
   redstone-node:
     container_name: redstone-node
     image: baidang201/redstone-node:latest
-    working_dir: /var/www/substrate
+    working_dir: /var/www/redstone-node
     volumes:
       - './data:/data'
     ports:
       - "9944:9944"
     environment:
-      - CARGO_HOME=/var/www/substrate/.cargo
-    command: /usr/local/bin/substrate --dev --base-path  /data --rpc-cors all --rpc-methods=unsafe --rpc-external --unsafe-ws-external --unsafe-rpc-external   --pruning archive
+      - CARGO_HOME=/var/www/redstone-node/.cargo
+    command: /usr/local/bin/redstone-node --dev --base-path /data --rpc-cors all --rpc-methods=unsafe --rpc-external --unsafe-ws-external --unsafe-rpc-external   --pruning archive
     restart: always
     networks:
       redstonenetwork:
