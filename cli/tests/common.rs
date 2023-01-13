@@ -85,7 +85,7 @@ pub async fn wait_n_finalized_blocks_from(n: usize, url: &str) {
 
 /// Run the node for a while (3 blocks)
 pub async fn run_node_for_a_while(base_path: &Path, args: &[&str]) {
-	let mut cmd = Command::new(cargo_bin("substrate"))
+	let mut cmd = Command::new(cargo_bin("redstone-node"))
 		.stdout(process::Stdio::piped())
 		.stderr(process::Stdio::piped())
 		.args(args)
@@ -112,7 +112,7 @@ pub async fn run_node_for_a_while(base_path: &Path, args: &[&str]) {
 
 /// Run the node asserting that it fails with an error
 pub fn run_node_assert_fail(base_path: &Path, args: &[&str]) {
-	let mut cmd = Command::new(cargo_bin("substrate"));
+	let mut cmd = Command::new(cargo_bin("redstone-node"));
 
 	let mut child = KillChildOnDrop(cmd.args(args).arg("-d").arg(base_path).spawn().unwrap());
 

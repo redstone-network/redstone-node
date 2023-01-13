@@ -35,7 +35,7 @@ async fn running_the_node_works_and_can_be_interrupted() {
 	async fn run_command_and_kill(signal: Signal) {
 		let base_path = tempdir().expect("could not create a temp dir");
 		let mut cmd = common::KillChildOnDrop(
-			Command::new(cargo_bin("substrate"))
+			Command::new(cargo_bin("redstone-node"))
 				.stdout(process::Stdio::piped())
 				.stderr(process::Stdio::piped())
 				.args(&["--dev", "-d"])
@@ -76,7 +76,7 @@ async fn running_the_node_works_and_can_be_interrupted() {
 #[tokio::test]
 async fn running_two_nodes_with_the_same_ws_port_should_work() {
 	fn start_node() -> Child {
-		Command::new(cargo_bin("substrate"))
+		Command::new(cargo_bin("redstone-node"))
 			.stdout(process::Stdio::piped())
 			.stderr(process::Stdio::piped())
 			.args(&["--dev", "--tmp", "--ws-port=45789", "--no-hardware-benchmarks"])
