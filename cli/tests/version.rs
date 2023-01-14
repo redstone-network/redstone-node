@@ -21,7 +21,7 @@ use regex::Regex;
 use std::process::Command;
 
 fn expected_regex() -> Regex {
-	Regex::new(r"^substrate (.+)-([a-f\d]+)$").unwrap()
+	Regex::new(r"^redstone-node (.+)-([a-f\d]+)$").unwrap()
 }
 
 #[test]
@@ -41,11 +41,11 @@ fn version_is_full() {
 fn test_regex_matches_properly() {
 	let expected = expected_regex();
 
-	let captures = expected.captures("substrate 2.0.0-da487d19d").unwrap();
+	let captures = expected.captures("redstone-node 2.0.0-da487d19d").unwrap();
 	assert_eq!(&captures[1], "2.0.0");
 	assert_eq!(&captures[2], "da487d19d");
 
-	let captures = expected.captures("substrate 2.0.0-alpha.5-da487d19d").unwrap();
+	let captures = expected.captures("redstone-node 2.0.0-alpha.5-da487d19d").unwrap();
 	assert_eq!(&captures[1], "2.0.0-alpha.5");
 	assert_eq!(&captures[2], "da487d19d");
 }
