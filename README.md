@@ -94,7 +94,7 @@ Install Docker first, then run the following command to start a node, and finall
 
 ```
 docker pull baidang201/redstone-node:latest
-docker run --network host baidang201/redstone-node:latest /usr/local/bin/substrate --dev --rpc-cors all --rpc-methods=unsafe --rpc-external --unsafe-ws-external --unsafe-rpc-external
+docker run --network host baidang201/redstone-node:latest /usr/local/bin/redstone-node --dev --rpc-cors all --rpc-methods=unsafe --rpc-external --unsafe-ws-external --unsafe-rpc-external
 ```
 
 ## Run Tests
