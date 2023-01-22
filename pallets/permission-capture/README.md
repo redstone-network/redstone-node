@@ -15,4 +15,4 @@ Users can configure their own friend list in advance. When the user realizes tha
 * `cancel_get_account_permissions` - A friend cancels a proposal initiated by himself.
 * `vote` - When the account is in takeover state, friends can use this method to vote on the address transaction application.
 * `create_capture_config` - The user creates a power grab configuration and writes his friend list into this method.
-* `operational_voting` - xxx.
+* `operational_voting` - vote for call hash of permission owner's.
