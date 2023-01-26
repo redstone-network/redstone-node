@@ -1,5 +1,3 @@
-# ![RSN](https://raw.githubusercontent.com/Cumulus2021/W3F-illustration/main/banner5.png)
-
 [![Substrate version](https://img.shields.io/badge/Substrate-3.0.0-blue?logo=Parity%20Substrate)](https://substrate.dev/) [![GitHub license](https://img.shields.io/badge/license-GPL3%2FApache2-blue)](#LICENSE)
 
 
