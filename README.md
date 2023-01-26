@@ -59,31 +59,7 @@ Launch node on the redstone-testnet with:
 
 ```
 # start
-./target/release/redstone-node --base-path /tmp/redstone --chain redstone-testnet
-```
-
-Then you can add an account with:
-
-```
-# create key file
-vim secretKey.txt
-
-# add secret phrase for the node in the file
-YOUR ACCOUNT'S SECRET PHRASE
-```
-
-```
-# add key to node
-./target/release/redstone-node key insert --base-path /tmp/redstone --chain redstone-testnet --scheme Sr25519  --key-type babe --suri /root/secretKey.txt
-
-./target/release/redstone-node key insert --base-path /tmp/redstone --chain redstone-testnet --scheme Ed25519  --key-type gran --suri /root/secretKey.txt
-```
-
-Now you can launch node again:
-
-```
-# start
-./target/release/redstone-node --base-path /tmp/redstone --chain redstone-testnet
+./target/release/redstone-node --base-path /tmp/redstone --chain dev --alice
 ```
 
 ## Run in Docker
