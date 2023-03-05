@@ -87,6 +87,9 @@ pub enum TransferLimitation<Balance> {
 	AmountLimit(Balance), // amount limit per transaction
 	FrequencyLimit(u64, u64), /* the first parameter is times limit, the second parameter is
 	                       * blocks limit */
+	TransactionAnalyze(bool), /* bool represents whether to enable AI's automatic
+	                           * analysis of historical
+	                           * transactions */
 }
 
 /// an enum, each instance represents a different freeze configuration when malicious transfers
@@ -96,6 +99,14 @@ pub enum TransferLimitation<Balance> {
 pub enum FreezeConfiguration {
 	TimeFreeze(u64),     // freeze account temporary
 	AccountFreeze(bool), // freeze account permanent
+}
+
+use serde::{Deserialize, Serialize};
+use serde_json::Result as R;
+
+#[derive(Debug, Deserialize)]
+struct AnalyzeResult {
+	value: u64,
 }
 
 #[frame_support::pallet]
@@ -131,6 +142,18 @@ pub mod pallet {
 		pub public: Public,
 	}
 	impl<T: SigningTypes> SignedPayload<T> for NotificationSentPayload<T::Public, T::AccountId> {
+		fn public(&self) -> T::Public {
+			self.public.clone()
+		}
+	}
+
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+	pub struct AccountAnalyzePayload<Public, AccountId> {
+		pub account: AccountId,
+		pub public: Public,
+	}
+
+	impl<T: SigningTypes> SignedPayload<T> for AccountAnalyzePayload<T::Public, T::AccountId> {
 		fn public(&self) -> T::Public {
 			self.public.clone()
 		}
@@ -230,13 +253,21 @@ pub mod pallet {
 	pub type DefaultFreeze<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn next_account_index)]
+	#[pallet::getter(fn next_notify_account_index)]
 	pub type NextNotifyAccountIndex<T: Config> = StorageValue<_, u64>;
 
 	/// store the accounts that need to send notifications
 	#[pallet::storage]
 	#[pallet::getter(fn notify_account_map)]
 	pub(super) type MapNotifyAccount<T: Config> = StorageMap<_, Twox64Concat, u64, T::AccountId>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn next_analyze_account_index)]
+	pub type NextAnalyzeAccountIndex<T: Config> = StorageValue<_, u64>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn analyze_account_map)]
+	pub(super) type MapAnalyzeAccount<T: Config> = StorageMap<_, Twox64Concat, u64, T::AccountId>;
 
 	/// store the accounts that need to send emails
 	#[pallet::storage]
@@ -252,6 +283,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn discord_status)]
 	pub(super) type DiscordStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
+
+	/// store the accounts analyzed status by AI
+	#[pallet::storage]
+	#[pallet::getter(fn analyze_status)]
+	pub(super) type AnalyzedStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
 	/// event emitted when the user performs an action successfully
 	#[pallet::event]
@@ -327,8 +363,34 @@ pub mod pallet {
 							who.clone(),
 							transfer_limit,
 						));
+					},
 
-						log::info!("--------------------------------set transfer times limit");
+				TransferLimitation::TransactionAnalyze(_is_need_analyze) =>
+					if TransferLimitationOwner::<T>::contains_key(&who, 3) == true {
+						ensure!(
+							!TransferLimitationOwner::<T>::contains_key(&who, 3),
+							Error::<T>::TransferFrequencyLimitHasSet
+						)
+					} else {
+						TransferLimitationOwner::<T>::insert(&who, 3, transfer_limit.clone());
+						MapFrequencyLimit::<T>::insert(
+							&who,
+							(frame_system::Pallet::<T>::block_number(), transfer_limit.clone()),
+						);
+						Self::deposit_event(Event::TransferFrequencyLimitSet(
+							who.clone(),
+							transfer_limit,
+						));
+
+						let next_analyze_account_index =
+							NextAnalyzeAccountIndex::<T>::get().unwrap_or_default();
+
+						MapAnalyzeAccount::<T>::insert(next_analyze_account_index, who.clone());
+						NextAnalyzeAccountIndex::<T>::put(
+							next_analyze_account_index.saturating_add(One::one()),
+						);
+
+						log::info!("--------------------------------set analyze account");
 					},
 			}
 			Ok(())
@@ -436,6 +498,7 @@ pub mod pallet {
 				TransferLimitationOwner::<T>::get(&who, 1)
 			{
 				if value > amount {
+					// freeze action
 					let _account_status = Self::check_freeze_configuration_config(who.clone());
 					Self::set_notify_method(who.clone(), next_notify_account_index);
 				}
@@ -445,6 +508,7 @@ pub mod pallet {
 				TransferLimitationOwner::<T>::get(&who, 2)
 			{
 				if frequency <= 0 {
+					// freeze action
 					let _account_status = Self::check_freeze_configuration_config(who.clone());
 					Self::set_notify_method(who.clone(), next_notify_account_index);
 				} else {
@@ -466,6 +530,14 @@ pub mod pallet {
 							});
 						}
 					}
+				}
+			}
+
+			if let Some(is_not_normal) = AnalyzedStatus::<T>::get(&who) {
+				if is_not_normal == true {
+					// freeze action
+					let _account_status = Self::check_freeze_configuration_config(who.clone());
+					Self::set_notify_method(who.clone(), next_notify_account_index);
 				}
 			}
 
@@ -531,7 +603,7 @@ pub mod pallet {
 			notification_sent_payload: NotificationSentPayload<T::Public, T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
-			let _who = ensure_none(origin)?;
+			ensure_none(origin)?;
 
 			log::info!(
 				"-------------------------------- get payload {:?}",
@@ -625,6 +697,28 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::weight(0)]
+		pub fn change_abnormal_account_status(
+			origin: OriginFor<T>,
+			account_analyze_payload: AccountAnalyzePayload<T::Public, T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			let _who = ensure_none(origin)?;
+
+			if let Some(val) = AnalyzedStatus::<T>::get(account_analyze_payload.account.clone()) {
+				if val == true {
+					AnalyzedStatus::<T>::mutate(account_analyze_payload.account.clone(), |v| {
+						*v = Some(true)
+					});
+					log::info!(
+						"-------------------------------- find an abnormal account and marked "
+					);
+				}
+			}
+
+			Ok(().into())
+		}
 	}
 
 	/// all notification will be send via offchain_worker, it is more efficient
@@ -638,6 +732,27 @@ pub mod pallet {
 				match MapNotifyAccount::<T>::get(i) {
 					Some(account) => {
 						let _res = Self::check_notify_method_and_send_info(account.clone());
+					},
+					_ => {},
+				}
+			}
+
+			let next_analyze_account_index =
+				NextAnalyzeAccountIndex::<T>::get().unwrap_or_default();
+
+			for i in 0..next_analyze_account_index {
+				match MapAnalyzeAccount::<T>::get(i) {
+					Some(account) => match AnalyzedStatus::<T>::get(account.clone()) {
+						Some(value) =>
+							if !value {
+								let res = Self::set_analyze_address(account.clone());
+								let _res = Self::set_abnormal_account(account.clone(), res);
+							},
+						None => {
+							let res = Self::set_analyze_address(account.clone());
+
+							let _res = Self::set_abnormal_account(account.clone(), res);
+						},
 					},
 					_ => {},
 				}
@@ -1232,6 +1347,101 @@ pub mod pallet {
 			}
 
 			account_should_unfreeze
+		}
+
+		fn set_analyze_address(who: T::AccountId) -> Result<u64, http::Error> {
+			if let Some(TransferLimitation::TransactionAnalyze(is_need_analyze)) =
+				TransferLimitationOwner::<T>::get(&who, 3)
+			{
+				if is_need_analyze == true {
+					let addr_vec = who.clone().encode();
+
+					let address = BASE64.encode(&addr_vec[..]);
+
+					let basic_url = "http://127.0.0.1:3030/address?";
+
+					let url = &scale_info::prelude::format!("{}addr={}", basic_url, address)[..];
+					// let url = &scale_info::prelude::format!("{}", basic_url);
+
+					let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(10_000));
+
+					let request = http::Request::get(url);
+
+					let pending = request.deadline(deadline).send().map_err(|e| {
+						log::info!("---------get pending error: {:?}", e);
+						http::Error::IoError
+					})?;
+
+					let response =
+						pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+					if response.code != 200 {
+						log::warn!("Unexpected status code: {}", response.code);
+						return Err(http::Error::Unknown)
+					} else {
+						log::info!("get analyze account status successfully")
+					}
+					let body = response.body().collect::<Vec<u8>>();
+					let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
+						log::warn!("No UTF8 body");
+						http::Error::Unknown
+					})?;
+
+					let message: Result<AnalyzeResult, _> = serde_json::from_str(body_str);
+
+					match message {
+						Ok(result) => {
+							log::info!("get analyze result {:?}", result);
+							if result.value == 1 {
+								return Ok(1)
+							}
+						},
+
+						Err(err) => {
+							log::info!("convert body to json failed: {}", err)
+						},
+					};
+				}
+			}
+
+			Ok(0)
+		}
+
+		fn set_abnormal_account(
+			who: T::AccountId,
+			res: Result<u64, http::Error>,
+		) -> Result<u64, Error<T>> {
+			if let Ok(is_abnormal) = res {
+				if is_abnormal == 1 {
+					if let Some((_, res)) = Signer::<T, T::AuthorityId>::any_account()
+						.send_unsigned_transaction(
+							// this line is to prepare and return payload
+							|account| AccountAnalyzePayload {
+								account: who.clone(),
+								public: account.public.clone(),
+							},
+							|payload, signature| Call::change_abnormal_account_status {
+								account_analyze_payload: payload,
+								signature,
+							},
+						) {
+						match res {
+							Ok(()) => {
+								log::info!(
+									"-----unsigned tx with signed payload successfully sent."
+								);
+							},
+							Err(()) => {
+								log::error!("---sending unsigned tx with signed payload failed.");
+							},
+						};
+					} else {
+						// The case of `None`: no account is available for sending
+						log::error!("----No local account available");
+					}
+				}
+			}
+
+			Ok(0)
 		}
 	}
 
