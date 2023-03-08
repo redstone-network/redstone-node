@@ -31,6 +31,7 @@ pub mod permission_capture;
 pub mod task;
 pub mod testing;
 pub mod transfer_protect;
+pub mod tx_tracing;
 //pub mod unchecked_extrinsic;
 pub use testing::*;
 

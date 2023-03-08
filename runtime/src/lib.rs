@@ -1202,6 +1202,17 @@ impl pallet_defense::Config for Runtime {
 	type CustomCallInterface = CustomCall;
 	type Notification = Notification;
 	type UnsignedPriority = UnsignedPriority;
+	type AccountInfo = TxTracingModule;
+}
+
+impl pallet_tx_tracing::Config for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type AuthorityId = pallet_defense::crypto::TestAuthId;
+
+	type Call = Call;
+
+	type UnsignedPriority = UnsignedPriority;
 }
 
 parameter_types! {
@@ -1692,6 +1703,7 @@ construct_runtime!(
 		Notification: pallet_notification,
 		PermissionCapture: pallet_permission_capture,
 		DefenseModule: pallet_defense,
+		TxTracingModule: pallet_tx_tracing,
 	}
 );
 

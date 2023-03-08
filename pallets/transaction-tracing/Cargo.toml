@@ -1,6 +1,6 @@
 [package]
-name = "pallet-defense"
-version = "4.0.0-dev"
+name = "pallet-tx-tracing"
+version = "0.0.1"
 description = "FRAME pallet difttt for defining custom runtime logic."
 authors = ["Substrate DevHub <https://github.com/substrate-developer-hub>"]
 homepage = "https://substrate.io/"
@@ -41,8 +41,6 @@ support = { package = "module-support", path = "../support", default-features = 
 pallet-notification = { default-features = false, path = "../notification"}
 pallet-difttt = { default-features = false, path = "../difttt"}
 pallet-permission-capture = { default-features = false, path = "../permission-capture"}
-pallet-tx-tracing = { default-features = false, path = "../transaction-tracing"}
-
 
 [dev-dependencies]
 sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.24" }
