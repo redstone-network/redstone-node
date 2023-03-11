@@ -80,6 +80,7 @@ use static_assertions::const_assert;
 use node_primitives::{custom_call::CustomCallInterface, evm::EvmAddress, CurrencyId, TokenSymbol};
 use orml_currencies::BasicCurrencyAdapter;
 use orml_traits::MultiReservableCurrency;
+use orml_traits::TransferProtectInterface;
 use pallet_defense::Call as DefenseCall;
 use support::{DEXIncentives, Erc20InfoMapping};
 
@@ -299,17 +300,18 @@ impl InstanceFilter<Call> for ProxyType {
 			ProxyType::Any => true,
 			ProxyType::NonTransfer => !matches!(
 				c,
-				Call::Balances(..) |
-					Call::Assets(..) | Call::Uniques(..) |
-					Call::Vesting(pallet_vesting::Call::vested_transfer { .. }) |
-					Call::Indices(pallet_indices::Call::transfer { .. })
+				Call::Balances(..)
+					| Call::Assets(..) | Call::Uniques(..)
+					| Call::Vesting(pallet_vesting::Call::vested_transfer { .. })
+					| Call::Indices(pallet_indices::Call::transfer { .. })
 			),
 			ProxyType::Governance => matches!(
 				c,
-				Call::Democracy(..) |
-					Call::Council(..) | Call::Society(..) |
-					Call::TechnicalCommittee(..) |
-					Call::Elections(..) | Call::Treasury(..)
+				Call::Democracy(..)
+					| Call::Council(..) | Call::Society(..)
+					| Call::TechnicalCommittee(..)
+					| Call::Elections(..)
+					| Call::Treasury(..)
 			),
 			ProxyType::Staking => matches!(c, Call::Staking(..)),
 		}
@@ -644,8 +646,8 @@ impl Get<Option<(usize, ExtendedBalance)>> for OffchainRandomBalancing {
 			max => {
 				let seed = sp_io::offchain::random_seed();
 				let random = <u32>::decode(&mut TrailingZeroInput::new(&seed))
-					.expect("input is padded with zeroes; qed") %
-					max.saturating_add(1);
+					.expect("input is padded with zeroes; qed")
+					% max.saturating_add(1);
 				random as usize
 			},
 		};
@@ -1202,7 +1204,7 @@ impl pallet_defense::Config for Runtime {
 	type CustomCallInterface = CustomCall;
 	type Notification = Notification;
 	type UnsignedPriority = UnsignedPriority;
-	type AccountInfo = TxTracingModule;
+	type AccountStatusInfo = TxTracingModule;
 }
 
 impl pallet_tx_tracing::Config for Runtime {

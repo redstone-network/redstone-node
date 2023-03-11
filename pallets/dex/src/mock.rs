@@ -90,7 +90,7 @@ parameter_type_with_key! {
 pub struct TestTransferProtect;
 
 impl TransferProtectInterface<Balance> for TestTransferProtect {
-	fn get_amout_limit() -> Balance {
+	fn get_amount_limit() -> Balance {
 		Default::default()
 	}
 	fn get_tx_block_limit() -> u64 {

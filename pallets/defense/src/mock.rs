@@ -29,6 +29,7 @@ frame_support::construct_runtime!(
 		DefenseModule: pallet_defense,
 		NotificationModule: pallet_notification,
 		PermissionCaptureModule: pallet_permission_capture,
+		TxTracingModule:pallet_tx_tracing,
 	}
 );
 
@@ -93,6 +94,7 @@ impl pallet_defense::Config for Test {
 	type PermissionCaptureInterface = PermissionCaptureModule;
 	type Notification = NotificationModule;
 	type UnsignedPriority = UnsignedPriority;
+	type AccountStatusInfo = TxTracingModule;
 }
 
 type Extrinsic = TestXt<Call, ()>;
@@ -146,6 +148,14 @@ impl pallet_permission_capture::Config for Test {
 	type MaxFriends = MaxFriends;
 	type Currency = Balances;
 	type Call = Call;
+}
+
+impl pallet_tx_tracing::Config for Test {
+	type Event = Event;
+	type Currency = Balances;
+	type AuthorityId = pallet_defense::crypto::TestAuthId;
+	type Call = Call;
+	type UnsignedPriority = UnsignedPriority;
 }
 
 // Build genesis storage according to the mock runtime.

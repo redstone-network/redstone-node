@@ -8,6 +8,7 @@ use frame_system as system;
 use pallet_defense::Call as DefenseCall;
 use pallet_difttt::crypto::TestAuthId;
 use primitives::custom_call::CustomCallInterface;
+use primitives::tx_tracing::AccountStatusInfo;
 use sp_core::{
 	sr25519::{Public, Signature},
 	H256,
@@ -16,6 +17,7 @@ use sp_runtime::{
 	testing::{Header, TestXt},
 	traits::{BlakeTwo256, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify},
 };
+use system::AccountInfo;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -86,6 +88,13 @@ impl CustomCallInterface<AccountId, u128> for CustomCall {
 	}
 }
 
+pub struct AccountStatus;
+impl AccountStatusInfo<AccountId> for AccountStatus {
+	fn get_account_status(who: AccountId) -> Option<bool> {
+		Some(true)
+	}
+}
+
 parameter_types! {
 	pub const UnsignedPriority: u64 = 1;
 }
@@ -99,6 +108,7 @@ impl pallet_defense::Config for Test {
 	type CustomCallInterface = CustomCall;
 	type Notification = NotificationModule;
 	type UnsignedPriority = UnsignedPriority;
+	type AccountStatusInfo = AccountStatus;
 }
 
 parameter_types! {

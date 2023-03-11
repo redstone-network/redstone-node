@@ -26,9 +26,7 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system,
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		DefenseModule: pallet_defense,
-		NotificationModule: pallet_notification,
-		PermissionCaptureModule: pallet_permission_capture,
+		TxTracingModule:pallet_tx_tracing,
 	}
 );
 
@@ -87,7 +85,7 @@ parameter_types! {
 impl pallet_tx_tracing::Config for Test {
 	type Event = Event;
 	type Currency = Balances;
-	type AuthorityId = pallet_defense::crypto::TestAuthId;
+	type AuthorityId = pallet_tx_tracing::crypto::TestAuthId;
 	type Call = Call;
 	type UnsignedPriority = UnsignedPriority;
 }
@@ -97,14 +95,6 @@ type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
 
 parameter_types! {
 	pub const MaxFriends: u32 = 128;
-}
-
-pub struct CustomCall;
-impl CustomCallInterface<AccountId, u128> for CustomCall {
-	fn call_transfer(to: AccountId, value: u128) -> Vec<u8> {
-		let call = Call::DefenseModule(DefenseCall::safe_transfer { to, value });
-		call.encode()
-	}
 }
 
 impl frame_system::offchain::SigningTypes for Test {
@@ -132,17 +122,6 @@ where
 	) -> Option<(Call, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
 		Some((call, (nonce, ())))
 	}
-}
-
-impl pallet_notification::Config for Test {
-	type Event = Event;
-}
-
-impl pallet_permission_capture::Config for Test {
-	type Event = Event;
-	type MaxFriends = MaxFriends;
-	type Currency = Balances;
-	type Call = Call;
 }
 
 // Build genesis storage according to the mock runtime.

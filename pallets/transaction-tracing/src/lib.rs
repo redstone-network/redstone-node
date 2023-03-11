@@ -30,7 +30,6 @@ use frame_support::{
 	traits::WrapperKeepOpaque,
 	weights::{GetDispatchInfo, PostDispatchInfo},
 };
-
 use scale_info::TypeInfo;
 use sp_runtime::{
 	offchain::{http, Duration},
@@ -52,6 +51,7 @@ pub type CallHash = [u8; 32];
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"ocwd");
 pub mod crypto {
 	use super::KEY_TYPE;
+	use scale_info::prelude::string::String;
 	use sp_core::sr25519::Signature as Sr25519Signature;
 	use sp_runtime::{
 		app_crypto::{app_crypto, sr25519},
@@ -88,7 +88,6 @@ pub enum ActionConfig {
 }
 
 use serde::{Deserialize, Serialize};
-use serde_json::Result as R;
 #[derive(Debug, Deserialize)]
 struct TracingResult {
 	value: u64,
@@ -285,7 +284,7 @@ pub mod pallet {
 				pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
 			if response.code != 200 {
 				log::warn!("Unexpected status code: {}", response.code);
-				return Err(http::Error::Unknown)
+				return Err(http::Error::Unknown);
 			} else {
 				log::info!("get analyze account status successfully")
 			}
@@ -301,7 +300,7 @@ pub mod pallet {
 				Ok(result) => {
 					log::info!("get analyze result {:?}", result);
 					if result.value == 1 {
-						return Ok(1)
+						return Ok(1);
 					}
 				},
 
@@ -376,7 +375,7 @@ pub mod pallet {
 					let signature_valid =
 						SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone());
 					if !signature_valid {
-						return InvalidTransaction::BadProof.into()
+						return InvalidTransaction::BadProof.into();
 					}
 
 					valid_tx(b"set_account_as_abnormal".to_vec())

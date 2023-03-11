@@ -178,7 +178,7 @@ pub mod pallet {
 
 		type CustomCallInterface: CustomCallInterface<Self::AccountId, BalanceOf<Self>>;
 		type Notification: NotificationInfoInterface<Self::AccountId, Action<Self::AccountId>>;
-		type AccountInfo: AccountStatusInfo<Self::AccountId>;
+		type AccountStatusInfo: AccountStatusInfo<Self::AccountId>;
 	}
 
 	/// store transfer limit
@@ -486,7 +486,7 @@ pub mod pallet {
 
 			// 引入追踪接口
 
-			if let Some(abnormal) = T::AccountInfo::get_account_status(who.clone()) {
+			if let Some(abnormal) = T::AccountStatusInfo::get_account_status(who.clone()) {
 				if abnormal {
 					// freeze action
 					let _account_status = Self::check_freeze_configuration_config(who.clone());

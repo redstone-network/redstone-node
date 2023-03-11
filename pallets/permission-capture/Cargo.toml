@@ -20,6 +20,7 @@ frame-system = { git = "https://github.com/paritytech/substrate", branch = "polk
 sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24", default-features = false }
 pallet-difttt = { default-features = false, path = "../difttt"}
 primitives = { package = "acala-primitives", path = "../../primitives", default-features = false }
+# pallet-tx-tracing = { default-features = false, path = "../transaction-tracing"}
 
 [dev-dependencies]
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.24" }

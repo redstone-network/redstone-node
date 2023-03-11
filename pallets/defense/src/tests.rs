@@ -4,7 +4,8 @@ use crate::{mock::*, Error};
 use frame_support::{assert_noop, assert_ok};
 
 use mock::Event;
-use sp_core::sr25519::Public;
+use pallet_tx_tracing::TrancedAccountPayload;
+use sp_core::sr25519::{Public, Signature};
 
 #[test]
 fn set_transfer_limitation_should_work() {
@@ -314,3 +315,34 @@ fn safe_transfer_should_fail_when_amount_is_too_large_without_risk_management() 
 		);
 	});
 }
+
+// #[test]
+// fn safe_transfer_should_fail_when_transaction_is_abnormal() {
+// 	new_test_ext().execute_with(|| {
+// 		let signer = Public::from_raw([0; 32]);
+
+// 		let to = Public::from_raw([1; 32]);
+
+// 		assert_ok!(TxTracingModule::set_tracing_account(Origin::signed(signer)));
+
+// 		let _s = Signature([0_u8; 64]);
+
+// 		let traced_account_payload =
+// 			TrancedAccountPayload { account: signer.clone(), public: signer };
+
+// 		assert_ok!(TxTracingModule::set_account_as_abnormal(
+// 			Origin::none(),
+// 			traced_account_payload,
+// 			_s
+// 		));
+
+// 		assert_ok!(DefenseModule::safe_transfer(Origin::signed(signer), to, 51));
+
+// 		assert_eq!(DefaultFreeze::<Test>::get(signer), Some(true));
+
+// 		assert_noop!(
+// 			DefenseModule::safe_transfer(Origin::signed(signer), to, 10),
+// 			Error::<Test>::AccountHasBeenFrozenTemporary
+// 		);
+// 	});
+// }
