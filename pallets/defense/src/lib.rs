@@ -98,6 +98,12 @@ pub enum FreezeConfiguration {
 	AccountFreeze(bool), // freeze account permanent
 }
 
+#[derive(Encode, Decode, Eq, PartialEq, Clone, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub enum AbnormalDetectionAction {
+	NotifyByEmail, // notify by email
+	FreezeAccount, // freeze account permanent
+}
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -253,6 +259,18 @@ pub mod pallet {
 	#[pallet::getter(fn discord_status)]
 	pub(super) type DiscordStatus<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, bool>;
 
+	/// store the account's abnormal detection status
+	#[pallet::storage]
+	#[pallet::getter(fn abnormal_detection_status)]
+	pub(super) type AbnormalDetectionStatus<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, bool>;
+
+	/// store the account's abnormal detection action
+	#[pallet::storage]
+	#[pallet::getter(fn map_abnormal_detection_action)]
+	pub(super) type MapAbnormalDetectionAction<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, AbnormalDetectionAction>;
+
 	/// event emitted when the user performs an action successfully
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -266,6 +284,8 @@ pub mod pallet {
 		FreezeAccountTemporary(T::AccountId),             // freeze account temporary
 		TransferSuccess(T::AccountId, T::AccountId, BalanceOf<T>), // transfer success
 		RemoveAddressFromNotifyList(T::AccountId),
+		UpdateAbnormalDetectionStatus(T::AccountId, bool),
+		UpdateAbnormalDetectionAction(T::AccountId, AbnormalDetectionAction),
 	}
 
 	/// events which indicate that users' call execute fail
@@ -282,6 +302,7 @@ pub mod pallet {
 		AccountHasBeenFrozenTemporary, // transfer again when account has been frozen temporary
 		PermissionTakenAccountHasPaddingCall, // frozen account has been in pending list
 		PermissionTakenAccountCallMustBeApproved, // take frozen account must be approved
+		EmailConfigNotSet,    // email not set in pallet notification
 	}
 
 	/// a function can set different transfer limitations, such as amount per transaction, times per
@@ -624,6 +645,38 @@ pub mod pallet {
 			}
 
 			Ok(().into())
+		}
+
+		#[pallet::weight(0)]
+		pub fn set_abnormal_detection_status(
+			origin: OriginFor<T>,
+			enable: bool,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+
+			AbnormalDetectionStatus::<T>::insert(who.clone(), enable);
+			Self::deposit_event(Event::UpdateAbnormalDetectionStatus(who.clone(), enable));
+		}
+
+		#[pallet::weight(0)]
+		pub fn set_abnormal_detection_action(
+			origin: OriginFor<T>,
+			action: AbnormalDetectionAction,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+
+			match action {
+				AbnormalDetectionAction::NotifyByEmail => {
+					ensure!(
+						T::Notification::get_mail_config_action(account).is_some(),
+						Error::<T>::EmailConfigNotSet,
+					);
+				},
+				_ => {},
+			}
+
+			MapAbnormalDetectionAction::<T>::insert(who.clone(), action);
+			Self::deposit_event(Event::UpdateAbnormalDetectionAction(who.clone(), action));
 		}
 	}
 
